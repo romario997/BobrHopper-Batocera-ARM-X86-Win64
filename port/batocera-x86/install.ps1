@@ -32,7 +32,7 @@ function Resolve-Roms([string]$t) {
     $t = $t.Trim().Trim('"').TrimEnd('\', '/')
     if ($t -match '^[A-Za-z]:?$') { $t = $t.Substring(0, 1) + ':' }
     if ($t -match '^\d{1,3}(\.\d{1,3}){3}$' -or $t -match '^[A-Za-z][\w-]*$' -and $t.Length -gt 1) { $t = "\\$t\share" }
-    foreach ($c in @("$t\roms", $t, (Split-Path -Parent $t))) {
+    foreach ($c in @("$t\roms", $t, $(try { Split-Path -Parent $t } catch { $null }))) {   # Split-Path throws on a bare "E:"
         if (-not $c) { continue }
         if ((Split-Path -Leaf $c) -eq 'roms' -and (Test-PathTimeout $c)) { return $c }
     }
