@@ -184,7 +184,8 @@ int main(int argc, char **argv)
                 if (!item.empty()) opt.shotSteps.push_back(std::atol(item.c_str()));
         }
     }
-#if defined(__linux__) && defined(__aarch64__)
+// the consoles (R36S, Batocera ARM) and Batocera PC (x86_64): always the whole screen at the desktop resolution
+#if defined(__linux__)
     if (!opt.hidden && !opt.headless) opt.fullscreen = true;
 #endif
     if ((opt.hidden && !opt.realtime) || opt.headless) opt.fast = true;
@@ -249,6 +250,16 @@ int main(int argc, char **argv)
     Screens screens;
     RenderTarget target;
     int viewW = platform.width(), viewH = platform.height();
+    // A screen taller than the 640x480 layout (Batocera PC: 1920x1080) is the same game, bigger: the HUD and the screens
+    // keep their layout in logical pixels - 480 tall and as wide as the screen's shape (853 on 16:9) - which the
+    // overlay scales up by uiScale (2.25 at 1080p; text from fonts baked at that size, outlines 2.25x as thick), and
+    // the 3D view shows the same stretch of the world as at 480 lines (only more of it sideways on a wide screen).
+    // 480 lines or fewer: uiScale 1, uiW/uiH = viewW/viewH - exactly what was drawn before.
+    const float uiScale = viewH > 480 ? float(viewH) / 480.0f : 1.0f;
+    const int uiW = uiScale > 1 ? int(float(viewW) / uiScale + 0.5f) : viewW;
+    const int uiH = uiScale > 1 ? 480 : viewH;
+    if (uiScale > 1) logf("ui: %dx%d logical on %dx%d (scale %.3f)", uiW, uiH, viewW, viewH, uiScale);
+    text.pixelScale = uiScale;
     if (!opt.headless) {
         renderer.hasStencil = platform.stencilBits() >= 8; // O19: without one the shadow pass must not mask itself
         if (!renderer.init() || !sceneRenderer.init(renderer, models, manifest, dataDir())) return 5;
@@ -620,7 +631,7 @@ int main(int argc, char **argv)
         if (opt.framingStats && game.state() == GameState::Playing && game.hero().isAlive) {
             updateWorld(game.sceneRoot());
             sceneRenderer.viewShift = opt.viewShift;
-            sceneRenderer.setupCamera(game, viewW, viewH, opt.viewScale);
+            sceneRenderer.setupCamera(game, viewW, viewH, opt.viewScale / uiScale);
             sceneRenderer.measureFraming(game, viewH);
             const FramingInfo &fr = sceneRenderer.framing;
             heroYs.push_back(fr.heroScreenY);
@@ -666,7 +677,7 @@ int main(int argc, char **argv)
         sceneRenderer.shadowMode = opt.shadows;
         sceneRenderer.viewShift = opt.viewShift;
         sceneRenderer.batchStatic = opt.batch;
-        sceneRenderer.render(renderer, game, viewW, viewH, opt.viewScale);
+        sceneRenderer.render(renderer, game, viewW, viewH, opt.viewScale / uiScale);
         const RenderStats sceneStats = renderer.stats; // the 3D scene alone, before HUD and overlay
         if (statsFrame) {
             statDraws.push_back(sceneStats.drawCalls);
@@ -675,9 +686,9 @@ int main(int argc, char **argv)
             for (int k = 0; k < SceneRenderer::KindCount; k++) statKinds[k] += sceneRenderer.drawsByKind[k];
         }
         if (opt.hud) {
-            screens.drawSceneFade(renderer, viewW, viewH);
-            drawHud(renderer, text, game, viewW, viewH);
-            screens.draw(renderer, text, game, viewW, viewH);
+            screens.drawSceneFade(renderer, uiW, uiH);
+            drawHud(renderer, text, game, uiW, uiH);
+            screens.draw(renderer, text, game, uiW, uiH);
         }
         {
             const NightTint tint = nightTint(userSettings.night);
@@ -688,7 +699,7 @@ int main(int argc, char **argv)
             oc.drawCalls = sceneStats.drawCalls;
             oc.triangles = sceneStats.triangles;
             oc.casters = sceneRenderer.shadowCasters;
-            drawDebugOverlay(renderer, text, frameTimer, oc, viewW, viewH);
+            drawDebugOverlay(renderer, text, frameTimer, oc, uiW, uiH);
         }
 
         for (const std::string &name : pendingShots) {

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gameList>
+  <game>
+    <path>./BobrHopper.sh</path>
+    <name>Bóbr Hopper</name>
+    <desc>Skacz przez ulice, rzeki i tory, nie daj się przejechać. Tryb klasyczny bez końca i tryb progresji z poziomami i rangami, jeden lub dwóch graczy. Hop across roads, rivers and railways without getting run over: endless Classic mode and a Progression mode with levels and ranks, for one or two players.</desc>
+    <image>./images/BobrHopper-image.png</image>
+    <thumbnail>./images/BobrHopper-thumb.png</thumbnail>
+    <marquee>./images/BobrHopper-marquee.png</marquee>
+    <developer>G. Korycki</developer>
+    <publisher>angree</publisher>
+    <genre>Arcade</genre>
+    <players>1-2</players>
+  </game>
+</gameList>

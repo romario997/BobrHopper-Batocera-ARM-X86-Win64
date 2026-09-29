@@ -440,7 +440,8 @@ std::string Screens::settingsValue(SettingsItem item, const UserSettings &s) con
     case SetView: return lang::t(s.framing ? lang::Wide : lang::Normal);
     case SetShape: return lang::t(s.shape == 1 ? lang::ShapeNarrow : s.shape == 2 ? lang::ShapePhone : lang::ShapeFull);
     case SetLanguage: {
-        static const char *const names[lang::kLanguages] = {"ENGLISH", "POLSKI", "ESPAÑOL", "LATINA"};
+        static const char *const names[lang::kLanguages] = {"ENGLISH", "POLSKI", "ESPAÑOL", "LATINA", "ČEŠTINA",
+                                                            "SLOVENČINA", "MAGYAR", "ROMÂNĂ", "VOLAPÜK", "ESPERANTO"};
         return names[std::max(0, std::min(lang::kLanguages - 1, s.language))];
     }
     case SetCharacter: {
@@ -495,7 +496,10 @@ void Screens::drawSettings(Renderer &renderer, TextRenderer &text, int w, int h)
     if (scrollTop_ > count - rows) scrollTop_ = count - rows;
     if (scrollTop_ < 0) scrollTop_ = 0;
 
-    const int left = 96, right = w - 96, size = 18, top = 96, step = 42;
+    // a screen wider than the 640 layout (16:9 is 853 logical pixels) keeps the list in a 640-wide column in the middle,
+    // so a label and its value do not drift to the far edges; 640 and narrower: the margins it always had
+    const int wideMargin = w > 640 ? (w - 640) / 2 : 0;
+    const int left = 96 + wideMargin, right = w - 96 - wideMargin, size = 18, top = 96, step = 42;
     for (int r = 0; r < rows && scrollTop_ + r < count; r++) {
         const int i = scrollTop_ + r;
         const int y = top + r * step;

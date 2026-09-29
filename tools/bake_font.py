@@ -39,6 +39,17 @@ ACCENTS = {
     "stroke": [(50, 75, 150, 125), (100, 125, 200, 175)],
     # Spanish (the fourth language set): the tilde of Ñ, a wave on the 50-unit grid - low, high, low, high
     "tilde": [(0, 275, 50, 325), (50, 325, 125, 375), (125, 275, 200, 325), (200, 325, 250, 375)],
+    # Czech, Slovak, Hungarian, Romanian, Volapuk, Esperanto - the same grid, low marks, nothing wider than the letter
+    "caron": [(25, 325, 75, 375), (75, 275, 175, 325), (175, 325, 225, 375)],        # v: sides up, middle down
+    "circumflex": [(25, 275, 75, 325), (75, 325, 175, 375), (175, 275, 225, 325)],   # ^: middle up, sides down
+    "breve": [(25, 300, 75, 375), (75, 275, 175, 325), (175, 300, 225, 375)],        # u: a bowl with high sides
+    "ring": [(75, 275, 175, 300), (75, 350, 175, 375), (75, 300, 100, 350), (150, 300, 175, 350)],
+    "diaeresis": [(25, 300, 100, 375), (150, 300, 225, 375)],
+    "dacute": [(25, 275, 75, 325), (75, 325, 125, 375), (125, 275, 175, 325), (175, 325, 225, 375)],
+    # the Slovak L with caron is written with an apostrophe at its top right, inside the letter's box
+    "apostrophe": [(175, 175, 225, 250)],
+    # Romanian comma below (S and T), the same place as the ogonek but centred
+    "comma": [(100, -50, 150, 0), (75, -100, 125, -50)],
 }
 POLISH = {
     "Ą": ("A", "ogonek"), "Ć": ("C", "acute"), "Ę": ("E", "ogonek"), "Ł": ("L", "stroke"), "Ń": ("N", "acute"),
@@ -49,6 +60,20 @@ POLISH = {
     "Á": ("A", "acute"), "É": ("E", "acute"), "Í": ("I", "acute"), "Ú": ("U", "acute"), "Ñ": ("N", "tilde"),
     "á": ("a", "acute"), "é": ("e", "acute"), "í": ("i", "acute"), "ú": ("u", "acute"), "ñ": ("n", "tilde"),
 }
+# the six later languages (src/engine/assets.h kPolishLetters has the same letters, in its own order)
+MORE = {
+    "Č": "caron", "Ď": "caron", "Ě": "caron", "Ň": "caron", "Ř": "caron", "Š": "caron", "Ť": "caron", "Ž": "caron",
+    "Ů": "ring", "Ý": "acute", "Ä": "diaeresis", "Ĺ": "acute", "Ľ": "apostrophe", "Ô": "circumflex", "Ŕ": "acute",
+    "Ö": "diaeresis", "Ü": "diaeresis", "Ő": "dacute", "Ű": "dacute",
+    "Ă": "breve", "Â": "circumflex", "Î": "circumflex", "Ș": "comma", "Ț": "comma", "Ş": "comma", "Ţ": "comma",
+    "Ĉ": "circumflex", "Ĝ": "circumflex", "Ĥ": "circumflex", "Ĵ": "circumflex", "Ŝ": "circumflex", "Ŭ": "breve",
+}
+_BASE = {"Č": "C", "Ď": "D", "Ě": "E", "Ň": "N", "Ř": "R", "Š": "S", "Ť": "T", "Ž": "Z", "Ů": "U", "Ý": "Y", "Ä": "A",
+         "Ĺ": "L", "Ľ": "L", "Ô": "O", "Ŕ": "R", "Ö": "O", "Ü": "U", "Ő": "O", "Ű": "U", "Ă": "A", "Â": "A", "Î": "I",
+         "Ș": "S", "Ț": "T", "Ş": "S", "Ţ": "T", "Ĉ": "C", "Ĝ": "G", "Ĥ": "H", "Ĵ": "J", "Ŝ": "S", "Ŭ": "U"}
+for _up, _mark in MORE.items():
+    POLISH[_up] = (_BASE[_up], _mark)
+    POLISH[_up.lower()] = (_BASE[_up].lower(), _mark)
 # punctuation: (ink width, rectangles from x = 0). A letter's ink ends 50 units before its advance, so punctuation is
 # drawn 50 units in from the pen and its advance leaves 50 after it: both neighbours then keep the letters' own gap
 # even at 6 px, where a letter's 50 units are the single pixel that separates the glyphs.
@@ -161,7 +186,8 @@ def bake(ttf, size, dst):
         glyphs.append((ch, img.crop((l + size, t + size, r + size, b + size)), l, t, advance))
 
     pad = 1
-    atlas_w = 256 if size <= 16 else 512
+    # the big-screen sizes (> 48, build/bake_all.sh) get a wider atlas so none is taller than 4096
+    atlas_w = 256 if size <= 16 else 512 if size <= 48 else 1024
     x = y = row_h = 0
     placed = []
     for ch, img, xoff, yoff, adv in glyphs:

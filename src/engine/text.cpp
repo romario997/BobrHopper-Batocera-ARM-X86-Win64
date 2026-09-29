@@ -1,5 +1,9 @@
 #include "engine/text.h"
 
+#ifndef CR_FIXED
+#include <cmath>
+#endif
+
 #include "engine/log.h"
 #include "engine/strings.h"
 
@@ -24,6 +28,19 @@ bool TextRenderer::load(Renderer &renderer, const std::string &dataDir)
 {
     for (int size : kSizes) {
         Loaded font;
+#ifndef CR_FIXED
+        // a big screen: the same face baked for its real pixels (tools/bake_font.py --sizes, build/bake_all.sh)
+        if (pixelScale > 1) {
+            const int hi = int(std::floor(float(size) * pixelScale + 0.5f));
+            if (hi != size && loadFont(dataDir + "fonts/retro_" + toString(hi) + ".fnt", font.data)) {
+                font.scale = pixelScale;
+                font.texture = renderer.uploadAlphaTexture(font.data.atlasW, font.data.atlasH, font.data.coverage.data());
+                fonts_[size] = std::move(font);
+                continue;
+            }
+            logf("text: no retro_%d.fnt for size %d at scale %.2f, the 1x font is magnified", hi, size, pixelScale);
+        }
+#endif
         std::string path = dataDir + "fonts/retro_" + toString(size / glyphScale) + ".fnt";
         if (!loadFont(path, font.data)) {
             logf("text: cannot load %s", path.c_str());
@@ -44,13 +61,20 @@ int TextRenderer::width(const std::string &text, int size) const
         const int slot = nextGlyph(text, i);
         if (slot >= 0) w += it->second.data.glyphs[slot].advance * glyphScale;
     }
+#ifndef CR_FIXED
+    if (it->second.scale != 1) return int(std::floor(float(w) / it->second.scale + 0.5f));
+#endif
     return w;
 }
 
 int TextRenderer::lineHeight(int size) const
 {
     auto it = fonts_.find(size);
-    return it == fonts_.end() ? 0 : it->second.data.lineHeight * glyphScale;
+    if (it == fonts_.end()) return 0;
+#ifndef CR_FIXED
+    if (it->second.scale != 1) return int(std::floor(float(it->second.data.lineHeight) / it->second.scale + 0.5f));
+#endif
+    return it->second.data.lineHeight * glyphScale;
 }
 
 void TextRenderer::draw(Renderer &renderer, const std::string &text, int x, int y, int size, Rgba color)
@@ -59,6 +83,32 @@ void TextRenderer::draw(Renderer &renderer, const std::string &text, int x, int 
     if (it == fonts_.end()) return;
     const FontData &f = it->second.data;
     verts_.clear();
+#ifndef CR_FIXED
+    if (it->second.scale != 1) {
+        // hi-res face: the pen walks the REAL pixels (glyph metrics are in them), snapped once at the start, and every
+        // corner goes back to logical pixels for the overlay - so each font pixel lands on whole screen pixels
+        const float s = it->second.scale;
+        int pen = int(std::floor(float(x) * s + 0.5f));
+        const int top = int(std::floor(float(y) * s + 0.5f));
+        for (size_t i = 0; i < text.size();) {
+            const int slot = nextGlyph(text, i);
+            if (slot < 0) continue;
+            const Glyph &g = f.glyphs[slot];
+            if (g.w && g.h) {
+                const float x0 = float(pen + g.xoff) / s, y0 = float(top + g.yoff) / s;
+                const float x1 = float(pen + g.xoff + g.w) / s, y1 = float(top + g.yoff + g.h) / s;
+                const float u0 = float(g.x) / float(f.atlasW), v0 = float(g.y) / float(f.atlasH);
+                const float u1 = float(g.x + g.w) / float(f.atlasW), v1 = float(g.y + g.h) / float(f.atlasH);
+                const float quad[24] = {x0, y0, u0, v0, x1, y0, u1, v0, x1, y1, u1, v1,
+                                        x0, y0, u0, v0, x1, y1, u1, v1, x0, y1, u0, v1};
+                verts_.insert(verts_.end(), quad, quad + 24);
+            }
+            pen += g.advance;
+        }
+        renderer.drawOverlayTriangles(it->second.texture, verts_, color.r, color.g, color.b, color.a);
+        return;
+    }
+#endif
     int pen = x;
     for (size_t i = 0; i < text.size();) {
         const int slot = nextGlyph(text, i);

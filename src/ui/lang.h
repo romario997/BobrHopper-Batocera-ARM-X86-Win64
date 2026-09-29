@@ -24,8 +24,8 @@ enum Str {
     Count
 };
 
-// 0 English, 1 Polish, 2 Spanish, 3 Latin
-constexpr int kLanguages = 4;
+// 0 English, 1 Polish, 2 Spanish, 3 Latin, 4 Czech, 5 Slovak, 6 Hungarian, 7 Romanian, 8 Volapuk, 9 Esperanto
+constexpr int kLanguages = 10;
 void set(int language);
 int current();
 

@@ -1,0 +1,39 @@
+Rangi po hiszpansku i po lacinie - odtworzone z src/ui/ranks.cpp (ten plik nie trafil do repo).
+Format: poziom | Espanol | Latina
+
+1-1 | Badén | Gibbus Viae
+1-2 | Aperitivo de Camión | Cibus Plaustri
+1-3 | Abrazaárboles Profesional | Amplexator Arborum
+1-4 | Peatón Accidental | Pedes Fortuitus
+1-5 | Casi Atropellado | Paene Contritus
+2-1 | Saltacharcos | Saltator Lacunarum
+2-2 | Aprendiz de Surfista de Troncos | Tiro Truncorum
+2-3 | Novato del Paso de Cebra | Tiro Transitus
+2-4 | Esquivaparachoques | Vitator Plaustrorum
+2-5 | Bicho con un Plan | Bestiola cum Consilio
+3-1 | Susurrador del Tráfico | Susurrator Viarum
+3-2 | Capitán de los Nenúfares | Centurio Nymphaearum
+3-3 | Bailarín de las Vías | Saltator Ferriviae
+3-4 | Ninja de la Cuneta | Ninja Marginis
+3-5 | Veterano de los Cruces | Veteranus Transituum
+4-1 | Acróbata del Asfalto | Petaurista Bituminis
+4-2 | Domador del Río | Domitor Fluminis
+4-3 | Provocador de Trenes | Lacessitor Traminum
+4-4 | Sargento Hocico | Optio Rostrum
+4-5 | Jefe de la Calle | Dominus Viae
+5-1 | Héroe de la Autopista | Heros Viae Publicae
+5-2 | Capitán Encrucijada | Centurio Trivii
+5-3 | Señor de los Troncos | Dominus Truncorum
+5-4 | Comandante Caos | Tribunus Tumultus
+5-5 | Comandante de los Cruces | Legatus Transituum
+6-1 | Nervios de Acero | Nervi Ferrei
+6-2 | Tormenta con Patas | Tempestas Pedestris
+6-3 | General Atasco | Imperator Obstructionis
+6-4 | Pesadilla de los Conductores | Terror Aurigarum
+6-5 | Maestro del Camino | Magister Viae
+7-1 | Leyenda del Carril | Fabula Semitae
+7-2 | Mito de la Autopista | Mythus Viae Regiae
+7-3 | Paso de Oro | Gradus Aureus
+7-4 | Cruzador Supremo | Transitor Supremus
+7-5 | El Que Cruzó | Qui Transiit
+8-1+ | Leyenda Inmortal | Fabula Immortalis

@@ -97,6 +97,8 @@ bool Platform::init(const PlatformConfig &cfg)
         return false;
     }
     SDL_GL_SetSwapInterval(cfg.vsync ? 1 : 0);
+    // Batocera PC runs the game fullscreen on X11, where the desktop's pointer would sit in the middle of the picture
+    if (cfg.fullscreen) SDL_ShowCursor(SDL_DISABLE);
     SDL_GL_GetDrawableSize(win_, &w_, &h_);
     if (cfg.hidden) {
         w_ = cfg.width;

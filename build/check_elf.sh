@@ -1,9 +1,9 @@
 #!/bin/sh
-# Fails unless the aarch64 binary needs glibc <= 2.28 and only the libraries ArkOS surely has.
+# Fails unless the aarch64 / armhf / x86_64 binary needs glibc <= 2.28 and only the libraries ArkOS surely has.
 set -e
 BIN=$1
 MAX_GLIBC=2.28
-ALLOWED="libSDL2-2.0.so.0 libc.so.6 libm.so.6 libdl.so.2 libpthread.so.0 ld-linux-aarch64.so.1 librt.so.1"
+ALLOWED="libSDL2-2.0.so.0 libc.so.6 libm.so.6 libdl.so.2 libpthread.so.0 ld-linux-aarch64.so.1 ld-linux-armhf.so.3 ld-linux-x86-64.so.2 librt.so.1"
 
 needed=$(readelf -d "$BIN" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p')
 bad=0

@@ -26,6 +26,13 @@ public:
     // size N comes from a font baked at N / 2 whose metrics count double (crisp glyphs instead of scaled ones).
     // Set before load(); 1 everywhere else.
     int glyphScale = 1;
+#ifndef CR_FIXED
+    // Screens bigger than the 640x480 layout (Batocera PC at 1920x1080: 2.25): the overlay maps the logical pixels onto
+    // the real ones, and each size N is drawn from a font baked at round(N * pixelScale) when data/fonts has it (crisp
+    // at the real resolution; its metrics count 1 / pixelScale). Without such a file that size keeps the 1x font,
+    // magnified. Set before load(); 1 = exactly the old path (R36S, windowed PC at 640x480).
+    float pixelScale = 1;
+#endif
 
     bool hasSize(int size) const { return fonts_.count(size) != 0; }
     int width(const std::string &text, int size) const;
@@ -40,6 +47,9 @@ private:
     struct Loaded {
         FontData data;
         GpuTexture texture;
+#ifndef CR_FIXED
+        float scale = 1; // font pixels per logical pixel: pixelScale for a hi-res face, 1 otherwise
+#endif
     };
     std::map<int, Loaded> fonts_;
     std::vector<mreal> verts_;

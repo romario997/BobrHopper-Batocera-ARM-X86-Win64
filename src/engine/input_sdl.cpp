@@ -164,6 +164,17 @@ void Input::handleEvents(const std::vector<SDL_Event> &events)
         case SDL_CONTROLLERAXISMOTION: {
             int v = ev.caxis.value;
             const int slot = padSlot(ev.caxis.which);
+            if (ev.caxis.axis == SDL_CONTROLLER_AXIS_LEFTX || ev.caxis.axis == SDL_CONTROLLER_AXIS_LEFTY) {
+                uint8_t &state = axisState_[slot >= 0 ? slot : 2][ev.caxis.axis == SDL_CONTROLLER_AXIS_LEFTX ? 0 : 1];
+                if (state != 2) {
+                    const bool centred = v >= -kStickDeadzone && v <= kStickDeadzone;
+                    if (centred || state == 0)
+                        logf("input: pad %d stick %s = %d%s", slot, ev.caxis.axis == SDL_CONTROLLER_AXIS_LEFTX ? "x" : "y", v,
+                             centred ? " - centred, in use" : " - off centre, ignored until it centres");
+                    state = centred ? 2 : 1;
+                    if (!centred) break;
+                }
+            }
             if (ev.caxis.axis == SDL_CONTROLLER_AXIS_LEFTX) {
                 stick_ &= uint16_t(~(ActLeft | ActRight));
                 if (slot >= 0) padStick_[slot] &= uint16_t(~(ActLeft | ActRight));

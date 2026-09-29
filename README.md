@@ -7,6 +7,38 @@ Current build: **v028**.
 
 ![the game](docs/screenshot.png)
 
+## Batocera: ARM handhelds and x86 PCs
+
+This fork adds **Batocera** builds next to the R36S one (release packages: `BobrHopper-Batocera-<ver>.zip` for ARM,
+`BobrHopper-BatoceraPC-<ver>.zip` for x86_64):
+
+- **ARM** (tested on the Anbernic **RG35XX H**, community Batocera v40, Mali-G31): two binaries in one package,
+  `bobrhopper.aarch64` (64-bit Batocera, e.g. v43+ on the H700) and `bobrhopper.armhf` (the 32-bit userland of the
+  RG35XX H community build). `port/batocera/BobrHopper.sh` picks the binary by the system's dynamic loader and tries
+  the SDL video drivers in turn (wayland, x11, mali, kmsdrm, default), remembering the one that worked. The built-in
+  pad's A/B are swapped back to their printed labels (Batocera maps by position).
+- **x86_64 PC** (Batocera 42): the UI scales with the screen (1080p = 2.25x, outlines included, fonts baked at the
+  real size), 16:9 shows more of the world sideways instead of stretching.
+- **Menu artwork**: `ports/images/BobrHopper-{image,thumb,marquee}.png` and a `gamelist.xml` entry.
+- **Installer**: unpack the zip on Windows and run `WGRAJ_NA_KONSOLE.bat` (ARM) or `WGRAJ_NA_BATOCERE_PC.bat` (PC).
+  It finds the SD card / USB drive (or `\\BATOCERA\share` over the network), **asks before writing**, copies the game
+  to `roms/ports`, and merges the menu entry into `roms/ports/gamelist.xml` (keeping a backup). Settings and the best
+  score in `bobrhopper/conf` survive a reinstall.
+- **10 languages**: English, Polish, Spanish, Latin, Czech, Slovak, Hungarian, Romanian, Volapük, Esperanto (the baked
+  font draws all their letters).
+
+```sh
+sh build/build_batocera.sh        # -> out/batocera/bobrhopper.aarch64 + bobrhopper.armhf
+sh build/build_batocera_x86.sh    # -> out/batocera-x86/bobrhopper.x86_64
+python tools/make_batocera_media.py && python tools/make_batocera_x86_media.py
+powershell -File tools/package_batocera.ps1       # -> out/package/BobrHopper-Batocera-<ver>.zip
+powershell -File tools/package_batocera_x86.ps1   # -> out/package/BobrHopper-BatoceraPC-<ver>.zip
+```
+
+The armhf and x86_64 builds link against SDL2 2.0.9 from Debian buster sysroots made in WSL (`debootstrap --arch=armhf`
+/ `amd64`, like `build/setup_tools.sh` does for arm64), copied to `%LOCALAPPDATA%\BobrHopper\tools\armhf-sdl2` and
+`amd64-sdl2`.
+
 ## What this is based on
 
 The game logic is a port of **[EvanBacon/expo-crossy-road](https://github.com/EvanBacon/expo-crossy-road)**

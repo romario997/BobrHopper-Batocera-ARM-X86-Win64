@@ -98,6 +98,10 @@ private:
     // order, so the two are kept side by side here: padIds_[slot] is the instance id of pad `slot`.
     std::vector<int32_t> padIds_;
     uint16_t padBtn_[2] = {0, 0}, padStick_[2] = {0, 0}, padHat_[2] = {0, 0}, padRaw_[2] = {0, 0};
+    // Batocera v40 on the RG35XX H: a left stick that never reports its centre held "up" for good, so the d-pad's
+    // up never changed the combined state and never hopped. An axis counts only once it has been seen inside the
+    // deadzone: [slot 0, 1, other][x, y] = 0 not seen yet, 1 seen off-centre (logged), 2 centred - trusted.
+    uint8_t axisState_[3][2] = {{0, 0}, {0, 0}, {0, 0}};
     int padSlot(int32_t which) const;
 
     std::vector<uint16_t> replay_;

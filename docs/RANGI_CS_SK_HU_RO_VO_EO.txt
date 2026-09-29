@@ -1,0 +1,39 @@
+Rangi w szesciu kolejnych jezykach (tools/gen_ranks.py czyta ten plik po RANGI.txt i RANGI_ES_LA.txt).
+Format: poziom | Cestina | Slovencina | Magyar | Romana | Volapuk | Esperanto
+
+1-1 | Zpomalovací práh | Spomaľovač | Fekvőrendőr | Limitator de viteză | Stopöm Vega | Rapidobaro
+1-2 | Svačinka pro kamion | Desiata pre kamión | Kamionuzsonna | Gustare pentru camion | Zibil Kamiona | Manĝeto por Kamiono
+1-3 | Profesionální objímač stromů | Profesionálny objímač stromov | Hivatásos faölelő | Îmbrățișător de copaci | Bimigleban Calik | Profesia Arbobrakumulo
+1-4 | Náhodný chodec | Náhodný chodec | Véletlen gyalogos | Pieton întâmplător | Futan Fädik | Hazarda Piediranto
+1-5 | Skoro přejetý | Skoro prejdený | Majdnem elütött | Aproape călcat | Ti Pedrefölöl | Preskaŭ Dispremita
+2-1 | Skokan přes louže | Skokan cez mláky | Tócsaugró | Săritor peste bălți | Bunan Lulakas | Flaksaltanto
+2-2 | Učeň surfař na kládě | Učeň surfista na klade | Rönkszörf-tanonc | Ucenic surfer pe bușteni | Lärnan Bimasörfa | Lernanto de Ŝtipsurfado
+2-3 | Nováček na přechodu | Nováčik na priechode | Zebrán kezdő | Începător pe trecere | Nulan Lovegolöpa | Novulo ĉe Transirejo
+2-4 | Uhýbač nárazníků | Uhýbač nárazníkov | Lökhárító-kerülő | Evitator de bare | Vitan Stödabas | Evitanto de Bufroj
+2-5 | Zvířátko s plánem | Zvieratko s plánom | Állatka tervvel | Vietate cu plan | Nimülil ko Plan | Besteto kun Plano
+3-1 | Zaříkávač dopravy | Zaklínač dopravy | Forgalomsuttogó | Îmblânzitor de trafic | Lüvokan Tafa | Flustranto al Trafiko
+3-2 | Kapitán leknínů | Kapitán leknínov | Tavirózsa-kapitány | Căpitan de nuferi | Kapiten Nümfäas | Kapitano de Nimfeoj
+3-3 | Tanečník na kolejích | Tanečník na koľajniciach | Síntáncos | Dansator pe șine | Dansan su Rels | Dancisto sur Reloj
+3-4 | Silniční ninja | Cestný nindža | Útszéli nindzsa | Ninja de pe marginea drumului | Ninja Vegabörda | Vojranda Ninĝo
+3-5 | Veterán přechodů | Veterán priechodov | Átkelő-veterán | Veteran al trecerilor | Veteran Lovegolas | Veterano de Transiroj
+4-1 | Asfaltový akrobat | Asfaltový akrobat | Aszfaltakrobata | Acrobat de asfalt | Kobatan Sfalta | Asfalta Akrobato
+4-2 | Krotitel řek | Krotiteľ riek | Folyószelídítő | Îmblânzitor de râuri | Mekan Flumas Libik | Riverdresisto
+4-3 | Škádlič vlaků | Podpichovač vlakov | Vonatugrató | Tachinător de trenuri | Tupan Trenas | Incitanto de Trajnoj
+4-4 | Seržant Čumák | Seržant Ňufák | Pofa őrmester | Sergent Bot | Serjan Snut | Serĝento Muzelo
+4-5 | Šéf ulice | Šéf ulice | Az utca főnöke | Șeful străzii | Cif Süta | Estro de la Strato
+5-1 | Hrdina dálnice | Hrdina diaľnice | Autópálya-hős | Erou al autostrăzii | Hiel Gretavega | Heroo de la Aŭtovojo
+5-2 | Kapitán Křižovatka | Kapitán Križovatka | Kereszteződés kapitány | Căpitanul Intersecție | Kapiten Vegakrod | Kapitano Vojkruciĝo
+5-3 | Pán klád | Pán kmeňov | A rönkök ura | Stăpânul buștenilor | Söl Bimas | Sinjoro de la Ŝtipoj
+5-4 | Major Zmatek | Major Zmätok | Káosz őrnagy | Maiorul Haos | Majoran Konfud | Majoro Kaoso
+5-5 | Velitel přechodů | Veliteľ priechodov | Átkelők parancsnoka | Comandantul trecerilor | Komandan Lovegolas | Komandanto de Transiroj
+6-1 | Železné nervy | Železné nervy | Acélideg | Nervi de oțel | Nörvs Ferik | Fera Nervo
+6-2 | Bouře na nohou | Búrka na nohách | Lábon járó vihar | Furtună pe picioare | Tem su Futs | Ŝtormo sur Piedoj
+6-3 | Generál Zácpa | Generál Zápcha | Dugó tábornok | Generalul Ambuteiaj | General Blockam | Generalo Ŝtopiĝo
+6-4 | Noční můra řidičů | Nočná mora vodičov | A sofőrök rémálma | Coșmarul șoferilor | Neitajäd Vabanas | Koŝmaro de Ŝoforoj
+6-5 | Mistr silnice | Majster cesty | Az út mestere | Maestrul drumului | Mastan Vega | Majstro de la Vojo
+7-1 | Legenda pruhu | Legenda pruhu | A sáv legendája | Legenda benzii | Liedäd Vegadila | Legendo de la Leno
+7-2 | Mýtus dálnice | Mýtus diaľnice | Az autópálya mítosza | Mitul autostrăzii | Mit Gretavega | Mito de la Aŭtovojo
+7-3 | Zlatý krok | Zlatý krok | Aranylépés | Pasul de aur | Stäp Goldik | Ora Paŝo
+7-4 | Nejvyšší přecházeč | Najvyšší prechádzač | Legfőbb átkelő | Traversorul suprem | Lovegolan Muik | Supera Transiranto
+7-5 | Ten, který přešel | Ten, ktorý prešiel | Aki átkelt | Cel care a trecut | Utan Kel Elovegolom | Tiu Kiu Transiris
+8-1+ | Nesmrtelná legenda | Nesmrteľná legenda | Halhatatlan legenda | Legenda nemuritoare | Liedäd Nedeadik | Nemortigebla Legendo
