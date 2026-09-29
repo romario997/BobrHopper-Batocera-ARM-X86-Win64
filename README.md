@@ -13,6 +13,13 @@ Current build: **v028**.
 
 ![the game](docs/screenshot.png)
 
+## Windows x64
+
+`BobrHopper-Windows-<ver>.zip`: unpack anywhere and run `BobrHopper.exe`. Resizable window (the UI rescales live),
+Alt+Enter / F11 fullscreen, mouse and touch screen (tap = hop forward, swipe = hop sideways/back, on-screen buttons
+clickable), controller choice in the settings (arrows, WSAD, detected pads, hot-plug; a disconnected pad falls back to
+the keyboard), arrow keys always drive player 1. Build: `powershell -File tools/package_windows.ps1`.
+
 ## Batocera: ARM handhelds and x86 PCs
 
 This repository (https://github.com/romario997/BobrHopper-Batocera-ARM-X86-Win64) adds **Batocera** builds next to the R36S one (release packages: `BobrHopper-Batocera-<ver>.zip` for ARM,

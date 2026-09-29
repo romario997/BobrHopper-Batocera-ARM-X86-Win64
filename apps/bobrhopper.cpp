@@ -5,6 +5,11 @@
 //              --frames N stops after N logic steps; --fast runs steps without real-time pacing
 //              script tokens: wN = wait N steps, s = start (like releasing Up on the home screen),
 //              u/d/l/r = hop (key down this step, key up next), a = A button, shot:name = screenshot
+//              desktop tests: size:WxH = resize the window (a hidden run: the picture) the way a user's drag does,
+//              fs = Alt+Enter, vpad:NAME / vpadoff = plug a virtual pad in / pull it out again (Windows only),
+//              tap:X,Y = a mouse click / finger tap, swipe:X1,Y1,X2,Y2 = a quick drag (drawable pixels; Windows only)
+// Windows:     a resizable window (1280x720 at first, then the size and mode it was left in), Alt+Enter or F11 for
+//              the whole screen; --fullscreen / --windowed override the remembered mode
 #include <SDL.h>
 
 #include <algorithm>
@@ -14,6 +19,10 @@
 #include <sstream>
 #include <string>
 #include <vector>
+
+#ifdef _WIN32
+#include <direct.h>
+#endif
 
 #include "engine/assets.h"
 #include "engine/audio.h"
@@ -33,6 +42,7 @@
 #include "ui/hud.h"
 #include "ui/lang.h"
 #include "ui/controls.h"
+#include "ui/gesture.h"
 #include "ui/night.h"
 #include "ui/screens.h"
 #include "ui/version_app.h"
@@ -69,11 +79,12 @@ struct Options {
     // --depth-bits N: force the depth buffer the context asks for. The R36S gets 16 bits and its shadows flickered
     // there; a PC hands out 24 and hides the problem, so this reproduces the device's condition (O19).
     int depthBits = 0;
+    bool sizeCli = false, windowedCli = false, fullscreenCli = false; // Windows: they win over the remembered window
 };
 
 struct ScriptOp {
-    enum Kind { Wait, Start, Hop, A, Shot, Button } kind;
-    int value = 0;
+    enum Kind { Wait, Start, Hop, A, Shot, Button, Resize, Fullscreen, VPad, VPadOff, Tap, SwipeOp } kind;
+    int value = 0, value2 = 0, value3 = 0, value4 = 0;
     Swipe dir = Swipe::Up;
     int player = 0; // O23: "2u" hops the SECOND player; plain "u" is the first, as it always was
     std::string name;
@@ -115,6 +126,34 @@ std::vector<ScriptOp> parseScript(const std::string &text)
                 logf("auto: unknown button %s", tok.c_str());
                 continue;
             }
+        } else if (tok.compare(0, 5, "size:") == 0) {
+            // a desktop window resized by its user (or a hidden run's picture): everything derived from the size
+            // is recomputed, exactly as after a real SDL_WINDOWEVENT_SIZE_CHANGED
+            op.kind = ScriptOp::Resize;
+            if (std::sscanf(tok.c_str() + 5, "%dx%d", &op.value, &op.value2) != 2) {
+                logf("auto: bad size %s", tok.c_str());
+                continue;
+            }
+        } else if (tok.compare(0, 4, "tap:") == 0) {
+            op.kind = ScriptOp::Tap;
+            if (std::sscanf(tok.c_str() + 4, "%d,%d", &op.value, &op.value2) != 2) {
+                logf("auto: bad tap %s", tok.c_str());
+                continue;
+            }
+        } else if (tok.compare(0, 6, "swipe:") == 0) {
+            op.kind = ScriptOp::SwipeOp;
+            if (std::sscanf(tok.c_str() + 6, "%d,%d,%d,%d", &op.value, &op.value2, &op.value3, &op.value4) != 4) {
+                logf("auto: bad swipe %s", tok.c_str());
+                continue;
+            }
+        } else if (tok == "fs") {
+            op.kind = ScriptOp::Fullscreen;
+        } else if (tok.compare(0, 5, "vpad:") == 0) {
+            op.kind = ScriptOp::VPad;
+            op.name = tok.substr(5);
+            std::replace(op.name.begin(), op.name.end(), '_', ' ');
+        } else if (tok == "vpadoff") {
+            op.kind = ScriptOp::VPadOff;
         } else if (tok.compare(0, 5, "shot:") == 0) {
             op.kind = ScriptOp::Shot;
             op.name = tok.substr(5);
@@ -136,6 +175,43 @@ bool saveShot(Renderer &renderer, int w, int h, const std::string &path)
     return ok;
 }
 
+#ifdef _WIN32
+// Where the settings and the log go on Windows: next to the exe when that folder can be written (the unzipped
+// package, out/pc), otherwise %APPDATA%\BobrHopper (an install under Program Files). With trailing separator.
+std::string windowsUserDir()
+{
+    const std::string local = baseDir();
+    _mkdir((local + "conf").c_str());
+    const std::string probe = local + "conf/.write_test";
+    if (FILE *f = std::fopen(probe.c_str(), "wb")) {
+        std::fclose(f);
+        std::remove(probe.c_str());
+        return local;
+    }
+    const char *appData = std::getenv("APPDATA");
+    if (!appData || !*appData) return local;
+    const std::string dir = std::string(appData) + "\\BobrHopper\\";
+    _mkdir(dir.c_str());
+    _mkdir((dir + "conf").c_str());
+    return dir;
+}
+
+// SDL's name for a pad, in what the baked font can draw: capitals, digits and single spaces ("Xbox 360 Controller
+// (XInput)" -> "XBOX 360 CONTROLLER XINPUT")
+std::string padLabel(const std::string &name)
+{
+    std::string out;
+    for (char c : name) {
+        char u = c >= 'a' && c <= 'z' ? char(c - 'a' + 'A') : c;
+        if (!((u >= 'A' && u <= 'Z') || (u >= '0' && u <= '9'))) u = ' ';
+        if (u == ' ' && (out.empty() || out.back() == ' ')) continue;
+        out += u;
+    }
+    while (!out.empty() && out.back() == ' ') out.pop_back();
+    return out.empty() ? std::string("PAD") : out;
+}
+#endif
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -148,13 +224,14 @@ int main(int argc, char **argv)
         else if (a == "--hidden") opt.hidden = true;
         else if (a == "--headless") opt.headless = true;
         else if (a == "--fast") opt.fast = true;
-        else if (a == "--fullscreen") opt.fullscreen = true;
+        else if (a == "--fullscreen") opt.fullscreen = true, opt.fullscreenCli = true;
+        else if (a == "--windowed") opt.windowedCli = true;
         else if (a == "--frames") opt.frames = std::atol(next().c_str());
         else if (a == "--auto") opt.autoScript = next();
         else if (a == "--shot-dir") opt.shotDir = next();
         else if (a == "--view-scale") opt.viewScale = float(std::atof(next().c_str())), opt.viewCli = true;
         else if (a == "--view-shift") opt.viewShift = float(std::atof(next().c_str())), opt.viewCli = true;
-        else if (a == "--size") std::sscanf(next().c_str(), "%dx%d", &opt.width, &opt.height);
+        else if (a == "--size") std::sscanf(next().c_str(), "%dx%d", &opt.width, &opt.height), opt.sizeCli = true;
         else if (a == "--no-idle") opt.noIdle = true;
         else if (a == "--no-shadows") opt.shadows = ShadowMode::Off, opt.shadowsCli = true;
         else if (a == "--shadows") {
@@ -223,8 +300,44 @@ int main(int argc, char **argv)
         opt.frames = opt.smoke;
     }
 
-    logOpen(baseDir() + "bobrhopper.log");
+#ifdef _WIN32
+    const std::string userDir = windowsUserDir();
+#else
+    const std::string userDir = baseDir();
+#endif
+    logOpen(userDir + "bobrhopper.log");
     logf("BobrHopper start: data=%s", dataDir().c_str());
+
+    // GameProvider: highscore rehydrated from storage, cached again whenever it changes. Read before the window
+    // exists: on Windows it also remembers the window's size and mode.
+    bool saveConf = !opt.confPath.empty() || (!opt.hidden && !opt.headless);
+    std::string confPath = opt.confPath.empty() ? userDir + "conf/crossy.cfg" : opt.confPath;
+    Config conf;
+    conf.load(confPath);
+    logf("config: %s", confPath.c_str());
+    const bool desktopWindow =
+#ifdef _WIN32
+        !opt.hidden && !opt.headless;
+#else
+        false;
+#endif
+    // Windows: the picture may take any shape (a window, or a hidden test run's --size / size: token)
+    const bool anySize =
+#ifdef _WIN32
+        true;
+#else
+        false;
+#endif
+    bool startMaximized = false;
+    if (desktopWindow) {
+        // a window of its own on the desktop, as big as it was left (1280x720 the first time), never under 640x480
+        if (!opt.sizeCli) {
+            opt.width = std::max(640, conf.getInt("window_w", 1280));
+            opt.height = std::max(480, conf.getInt("window_h", 720));
+            startMaximized = conf.getInt("window_maximized", 0) != 0;
+        }
+        if (!opt.fullscreenCli) opt.fullscreen = !opt.windowedCli && conf.getInt("window_fullscreen", 0) != 0;
+    }
 
     Manifest manifest;
     if (!loadManifest(dataDir() + "manifest.txt", manifest)) {
@@ -241,6 +354,20 @@ int main(int argc, char **argv)
     pc.headless = opt.headless;
     pc.fullscreen = opt.fullscreen;
     pc.depthBits = opt.depthBits;
+    if (desktopWindow) {
+        pc.resizable = true;
+        pc.minWidth = 640;
+        pc.minHeight = 480;
+        pc.maximized = startMaximized;
+        pc.fullscreenToggle = true;
+        pc.title = "Bóbr Hopper"; // UTF-8, as SDL wants it
+    }
+#ifdef _WIN32
+    // touch screens: SDL turns a finger into mouse events as well (which == SDL_TOUCH_MOUSEID, skipped below, the
+    // fingers are read as fingers); a real mouse must not turn into fingers
+    SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "1");
+    SDL_SetHint(SDL_HINT_MOUSE_TOUCH_EVENTS, "0");
+#endif
     Platform platform;
     if (!platform.init(pc)) return 4;
 
@@ -249,17 +376,34 @@ int main(int argc, char **argv)
     TextRenderer text;
     Screens screens;
     RenderTarget target;
-    int viewW = platform.width(), viewH = platform.height();
+    int viewW = 0, viewH = 0, uiW = 0, uiH = 0;
+    float uiScale = 1;
     // A screen taller than the 640x480 layout (Batocera PC: 1920x1080) is the same game, bigger: the HUD and the screens
     // keep their layout in logical pixels - 480 tall and as wide as the screen's shape (853 on 16:9) - which the
     // overlay scales up by uiScale (2.25 at 1080p; text from fonts baked at that size, outlines 2.25x as thick), and
     // the 3D view shows the same stretch of the world as at 480 lines (only more of it sideways on a wide screen).
     // 480 lines or fewer: uiScale 1, uiW/uiH = viewW/viewH - exactly what was drawn before.
-    const float uiScale = viewH > 480 ? float(viewH) / 480.0f : 1.0f;
-    const int uiW = uiScale > 1 ? int(float(viewW) / uiScale + 0.5f) : viewW;
-    const int uiH = uiScale > 1 ? 480 : viewH;
-    if (uiScale > 1) logf("ui: %dx%d logical on %dx%d (scale %.3f)", uiW, uiH, viewW, viewH, uiScale);
-    text.pixelScale = uiScale;
+    // Windows: the window can take any size and change it at any time, so this runs again after every resize.
+    auto computeLayout = [&]() {
+        viewW = platform.width();
+        viewH = platform.height();
+        uiScale = viewH > 480 ? float(viewH) / 480.0f : 1.0f;
+        bool byHeight = true;
+        // a desktop window narrower than 4:3 (1280x1024, a window dragged tall): the width decides instead, so the
+        // 640-wide layout always fits and the extra height goes to the picture
+        if (anySize && uiScale > 1 && float(viewW) / 640.0f < uiScale) {
+            uiScale = std::max(1.0f, float(viewW) / 640.0f);
+            byHeight = false;
+        }
+        uiW = uiScale > 1 ? int(float(viewW) / uiScale + 0.5f) : viewW;
+        uiH = uiScale > 1 ? (byHeight ? 480 : int(float(viewH) / uiScale + 0.5f)) : viewH;
+        if (uiScale > 1) logf("ui: %dx%d logical on %dx%d (scale %.3f)", uiW, uiH, viewW, viewH, uiScale);
+        text.pixelScale = uiScale;
+    };
+    computeLayout();
+#ifdef _WIN32
+    text.nearestFace = true; // any window size: the nearest baked face, crisp, rather than the 1x one magnified
+#endif
     if (!opt.headless) {
         renderer.hasStencil = platform.stencilBits() >= 8; // O19: without one the shadow pass must not mask itself
         if (!renderer.init() || !sceneRenderer.init(renderer, models, manifest, dataDir())) return 5;
@@ -267,6 +411,23 @@ int main(int argc, char **argv)
         if (!screens.load(renderer, dataDir())) return 5;
         if (opt.hidden && !renderer.createTarget(target, viewW, viewH)) return 6;
     }
+    // after a resize: the viewport, the UI's scale and logical size, the fonts baked for that scale and a hidden
+    // run's render target all follow the new drawable (the camera reads the sizes every frame)
+    auto relayout = [&]() {
+        const int oldW = viewW, oldH = viewH;
+        const float oldScale = uiScale;
+        computeLayout();
+        if (opt.headless || (viewW == oldW && viewH == oldH)) return;
+        logf("resize: %dx%d -> %dx%d, ui %dx%d scale %.3f", oldW, oldH, viewW, viewH, uiW, uiH, uiScale);
+        if (uiScale != oldScale) {
+            text.release(renderer);
+            if (!text.load(renderer, dataDir())) logf("resize: fonts failed to load");
+        }
+        if (opt.hidden) {
+            renderer.releaseTarget(target);
+            if (!renderer.createTarget(target, viewW, viewH)) logf("resize: render target %dx%d failed", viewW, viewH);
+        }
+    };
 
     Audio audio;
     audio.init(!opt.hidden && !opt.headless);
@@ -283,11 +444,6 @@ int main(int argc, char **argv)
 
     if (opt.seed == 0) opt.seed = uint32_t(SDL_GetPerformanceCounter() & 0x7fffffff) | 1u;
     logf("seed %u", opt.seed);
-    // GameProvider: highscore rehydrated from storage, cached again whenever it changes
-    bool saveConf = !opt.confPath.empty() || (!opt.hidden && !opt.headless);
-    std::string confPath = opt.confPath.empty() ? baseDir() + "conf/crossy.cfg" : opt.confPath;
-    Config conf;
-    conf.load(confPath);
 
     // settings screen values: conf/crossy.cfg, applied live, command-line --shadows / --view-* win
     UserSettings userSettings;
@@ -304,8 +460,13 @@ int main(int argc, char **argv)
     }
     // O23: how many play, and the device each of them uses (the names are kControlNames below)
     userSettings.players = std::max(1, std::min(2, conf.getInt("players", 1)));
-    userSettings.control[0] = std::max(0, std::min(3, conf.getInt("control_p1", 0)));
-    userSettings.control[1] = std::max(0, std::min(3, conf.getInt("control_p2", 1)));
+#ifdef _WIN32
+    const int kControlMax = 2 + kMaxPads - 1; // ARROWS, WSAD and every pad slot
+#else
+    const int kControlMax = 3;
+#endif
+    userSettings.control[0] = std::max(0, std::min(kControlMax, conf.getInt("control_p1", 0)));
+    userSettings.control[1] = std::max(0, std::min(kControlMax, conf.getInt("control_p2", 1)));
     userSettings.askPlayers = conf.getInt("ask_players", 0) != 0;
     userSettings.infiniteRespawn = conf.getInt("infinite_respawn", 0) != 0;
     userSettings.night = std::max(0, std::min(3, conf.getInt("night_mode", 0)));
@@ -355,14 +516,53 @@ int main(int argc, char **argv)
     screens.controlNames = kControlNames;
     screens.homeSettings = true; // a third bar on the title: SETTINGS (the author: more intuitive than Select)
     screens.controlCount = 4;
+#ifdef _WIN32
+    // Windows: the list is ARROWS, WSAD and then every pad slot BY THE PAD'S OWN NAME ("1: XBOX 360 CONTROLLER"). Pads
+    // come and go (hot-plug): an empty slot cannot be chosen, and a chosen pad that was pulled out says so.
+    static std::string padNames[kMaxPads];
+    static const char *winControlNames[2 + kMaxPads] = {"ARROWS", "WSAD"};
+    static bool winControlAvailable[2 + kMaxPads] = {true, true};
+    unsigned padsSeen = ~0u;
+    int padsLang = -1;
+    // true = a player's pad went away and they were moved to the keyboard (the settings need saving)
+    auto refreshControls = [&]() -> bool {
+        if (input.padsChanged() == padsSeen && lang::current() == padsLang) return false;
+        const bool padsMoved = input.padsChanged() != padsSeen;
+        padsSeen = input.padsChanged();
+        padsLang = lang::current();
+        for (int slot = 0; slot < kMaxPads; slot++) {
+            const bool on = input.padConnected(slot);
+            padNames[slot] = std::to_string(slot + 1) + ": " + (on ? padLabel(input.padName(slot)) : lang::t(lang::PadMissing));
+            winControlNames[2 + slot] = padNames[slot].c_str();
+            winControlAvailable[2 + slot] = on;
+            if (on) logf("input: settings list %d = %s", 3 + slot, padNames[slot].c_str());
+        }
+        // a player on a pad that is gone goes back to the keyboard (player one the arrows, player two WSAD)
+        if (padsMoved && fallBackFromMissingPads(userSettings, winControlAvailable, 2 + kMaxPads)) {
+            logf("input: a chosen pad is gone - player one on %s, player two on %s", winControlNames[userSettings.control[0]],
+                 winControlNames[userSettings.control[1]]);
+            return true;
+        }
+        return false;
+    };
+    if (refreshControls()) saveSettings();
+    screens.keyboardHints = true; // "A/ENTER", "SELECT/TAB" ...
+    screens.pointerUi = true;     // the mouse and the touch screen: a pause button, back arrows
+    screens.controlNames = winControlNames;
+    screens.controlAvailable = winControlAvailable;
+    screens.controlCount = 2 + kMaxPads;
+    const char *const *const logNames = winControlNames;
+#else
+    const char *const *const logNames = kControlNames;
+#endif
     // Defaults that suit the machine the game is actually on. A console with two pads should hand one to each
     // player without anybody visiting this screen first; a PC with no pad splits the keyboard instead.
     if (conf.getInt("control_p1", -1) < 0) { // nothing saved yet: pick from the machine
         const int pads = input.padCount();
         userSettings.control[0] = pads >= 1 ? 2 : 0;          // PAD 1, else the arrows
         userSettings.control[1] = pads >= 2 ? 3 : (pads >= 1 ? 0 : 1); // PAD 2, else the arrows, else WSAD
-        logf("input: %d pad(s) - player one on %s, player two on %s", pads, kControlNames[userSettings.control[0]],
-             kControlNames[userSettings.control[1]]);
+        logf("input: %d pad(s) - player one on %s, player two on %s", pads, logNames[userSettings.control[0]],
+             logNames[userSettings.control[1]]);
     }
     // O11.4: the Progression level the career screen offers to continue with
     // O24: a Progression career of its own for two players - it is a different game, played by two people, and
@@ -405,6 +605,9 @@ int main(int argc, char **argv)
     bool selectCombo = false; // Select held together with Start/L: its release is not a tap
     bool settingsDirty = false; // changed in the settings menu, written when it closes
     std::vector<std::string> pendingShots;
+#ifdef _WIN32
+    std::vector<SDL_JoystickID> virtualPads; // vpad: tokens
+#endif
 
     // determinism digest over every step (FNV-1a) and per-game resource counts for the leak check
     SmokeBot bot(opt.seed);
@@ -454,6 +657,106 @@ int main(int argc, char **argv)
     double acc = 0, last = platform.now();
     long stepsDone = 0;
 
+#ifdef _WIN32
+    // Mouse and touch (Windows). Positions arrive in drawable pixels and are handled in the overlay's logical pixels
+    // (uiW x uiH), where the screens lay themselves out. A press on the play field during a game starts the hop's
+    // squat and its release performs it - a swipe that way, anything else forward - exactly as a pad's button
+    // does; a click on anything the screens draw presses that thing's button for one step (Screens::pointerTap).
+    GestureTracker gesture;
+    bool pointerHeld = false, pointerOnField = false;
+    double pointerX0 = 0, pointerY0 = 0;
+    bool touchBeginPending = false, touchReleasePending = false;
+    Swipe touchDir = Swipe::Up;
+    uint16_t pointerMask = 0;
+    int pointerMaskSteps = 0;
+    bool scriptPointerUp = false; // tap: / swipe: tokens lift the finger one step later
+    double scriptUpX = 0, scriptUpY = 0;
+    auto onPointerDown = [&](double px, double py, double t) {
+        const double lx = px / uiScale, ly = py / uiScale;
+        pointerHeld = true;
+        pointerX0 = lx;
+        pointerY0 = ly;
+        gesture.down(lx, ly, t);
+        pointerOnField = game.state() == GameState::Playing && screens.menu() == Menu::None &&
+                         !screens.pointerOnUi(int(lx), int(ly), game, uiW, uiH);
+        if (pointerOnField) touchBeginPending = true; // the squat, like a pad button going down
+    };
+    auto onPointerMove = [&](double px, double py, double t) {
+        if (pointerHeld) gesture.move(px / uiScale, py / uiScale, t);
+    };
+    auto onPointerUp = [&](double px, double py, double t) {
+        if (!pointerHeld) return;
+        pointerHeld = false;
+        const double lx = px / uiScale, ly = py / uiScale;
+        Swipe dir = Swipe::Up;
+        const bool swipe = gesture.up(lx, ly, t, dir);
+        static const char *const dirNames[] = {"up", "down", "left", "right"};
+        if (pointerOnField) {
+            touchReleasePending = true;
+            touchDir = swipe ? dir : Swipe::Up; // the original's onTap is a swipe up
+            logf("pointer: %s on the play field (%.0f,%.0f -> %.0f,%.0f logical)", swipe ? dirNames[int(dir)] : "tap",
+                 pointerX0, pointerY0, lx, ly);
+            return;
+        }
+        if (swipe) {
+            // over a list: the content follows the finger (a swipe up shows the rows below)
+            if (dir == Swipe::Up || dir == Swipe::Down) screens.pointerScroll(dir == Swipe::Up ? 3 : -3, uiH);
+            logf("pointer: swipe %s over the menus", dirNames[int(dir)]);
+            return;
+        }
+        const int mask = screens.pointerTap(int(pointerX0), int(pointerY0), game, uiW, uiH);
+        logf("pointer: tap at %.0f,%.0f logical -> buttons 0x%x", pointerX0, pointerY0, mask > 0 ? mask : 0);
+        if (mask > 0) {
+            pointerMask = uint16_t(mask);
+            pointerMaskSteps = 1; // held for one step, let go on the next - a pad button's press and release
+        }
+    };
+    // the SDL events: the left mouse button (not the one SDL makes up from a finger) and the first finger down
+    bool fingerHeld = false;
+    SDL_FingerID fingerId = 0;
+    auto handlePointerEvents = [&](const std::vector<SDL_Event> &events) {
+        int winW = viewW, winH = viewH;
+        if (platform.window() && !opt.hidden) SDL_GetWindowSize(platform.window(), &winW, &winH);
+        const double sx = winW > 0 ? double(viewW) / double(winW) : 1.0, sy = winH > 0 ? double(viewH) / double(winH) : 1.0;
+        for (const SDL_Event &ev : events) {
+            switch (ev.type) {
+            case SDL_MOUSEBUTTONDOWN:
+                if (ev.button.which == SDL_TOUCH_MOUSEID || ev.button.button != SDL_BUTTON_LEFT || fingerHeld) break;
+                onPointerDown(ev.button.x * sx, ev.button.y * sy, ev.button.timestamp / 1000.0);
+                break;
+            case SDL_MOUSEMOTION:
+                if (ev.motion.which == SDL_TOUCH_MOUSEID || fingerHeld) break;
+                onPointerMove(ev.motion.x * sx, ev.motion.y * sy, ev.motion.timestamp / 1000.0);
+                break;
+            case SDL_MOUSEBUTTONUP:
+                if (ev.button.which == SDL_TOUCH_MOUSEID || ev.button.button != SDL_BUTTON_LEFT || fingerHeld) break;
+                onPointerUp(ev.button.x * sx, ev.button.y * sy, ev.button.timestamp / 1000.0);
+                break;
+            case SDL_MOUSEWHEEL:
+                if (ev.wheel.which == SDL_TOUCH_MOUSEID) break;
+                screens.pointerScroll(ev.wheel.y > 0 ? -1 : ev.wheel.y < 0 ? 1 : 0, uiH);
+                break;
+            case SDL_FINGERDOWN:
+                if (fingerHeld || pointerHeld) break; // one finger drives the game; the others are ignored
+                fingerHeld = true;
+                fingerId = ev.tfinger.fingerId;
+                onPointerDown(ev.tfinger.x * viewW, ev.tfinger.y * viewH, ev.tfinger.timestamp / 1000.0);
+                break;
+            case SDL_FINGERMOTION:
+                if (fingerHeld && ev.tfinger.fingerId == fingerId)
+                    onPointerMove(ev.tfinger.x * viewW, ev.tfinger.y * viewH, ev.tfinger.timestamp / 1000.0);
+                break;
+            case SDL_FINGERUP:
+                if (!fingerHeld || ev.tfinger.fingerId != fingerId) break;
+                fingerHeld = false;
+                onPointerUp(ev.tfinger.x * viewW, ev.tfinger.y * viewH, ev.tfinger.timestamp / 1000.0);
+                break;
+            default: break;
+            }
+        }
+    };
+#endif
+
     auto doStep = [&]() {
         uint16_t syntheticNow = 0;
         if (opt.smoke && opt.replay.empty()) {
@@ -461,6 +764,12 @@ int main(int argc, char **argv)
         } else {
             syntheticNow = scriptMaskSteps > 0 ? scriptMask : 0;
             if (scriptMaskSteps > 0) scriptMaskSteps--;
+#ifdef _WIN32
+            if (pointerMaskSteps > 0) {
+                syntheticNow = uint16_t(syntheticNow | pointerMask);
+                pointerMaskSteps--;
+            }
+#endif
         }
         input.setSynthetic(syntheticNow);
         // O23: in an automated run the bot or the script IS the input, so it also has to reach the devices the
@@ -469,6 +778,12 @@ int main(int argc, char **argv)
         if (opt.smoke || !script.empty())
             for (int p = 0; p < 2; p++) input.setDevice(playerDevice(userSettings, p), syntheticNow);
         input.step();
+#ifdef _WIN32
+        if (scriptPointerUp) { // the finger of a tap: / swipe: token lifts
+            scriptPointerUp = false;
+            onPointerUp(scriptUpX, scriptUpY, double(stepsDone) * Game::kDt);
+        }
+#endif
         // scripted input
         if (pendingRelease) {
             game.moveWithDirection(pendingDir, pendingPlayer);
@@ -494,6 +809,47 @@ int main(int argc, char **argv)
                 case ScriptOp::Button:
                     scriptMask = uint16_t(op.value);
                     scriptMaskSteps = 1;
+                    break;
+                case ScriptOp::Resize: platform.requestSize(op.value, op.value2); break;
+                case ScriptOp::Tap:
+                case ScriptOp::SwipeOp:
+#ifdef _WIN32
+                    onPointerDown(op.value, op.value2, double(stepsDone) * Game::kDt);
+                    scriptPointerUp = true;
+                    scriptUpX = op.kind == ScriptOp::Tap ? op.value : op.value3;
+                    scriptUpY = op.kind == ScriptOp::Tap ? op.value2 : op.value4;
+                    if (op.kind == ScriptOp::SwipeOp)
+                        onPointerMove((op.value + op.value3) / 2.0, (op.value2 + op.value4) / 2.0,
+                                      (double(stepsDone) + 0.5) * Game::kDt);
+#endif
+                    break;
+                case ScriptOp::Fullscreen: platform.toggleFullscreen(); break;
+                case ScriptOp::VPad:
+                case ScriptOp::VPadOff:
+#ifdef _WIN32
+                    // SDL's virtual joysticks (PC SDL 2.30): the same ADDED / REMOVED events a real pad sends
+                    if (op.kind == ScriptOp::VPad) {
+                        SDL_VirtualJoystickDesc desc;
+                        SDL_zero(desc);
+                        desc.version = SDL_VIRTUAL_JOYSTICK_DESC_VERSION;
+                        desc.type = SDL_JOYSTICK_TYPE_GAMECONTROLLER;
+                        desc.naxes = SDL_CONTROLLER_AXIS_MAX;
+                        desc.nbuttons = SDL_CONTROLLER_BUTTON_MAX;
+                        desc.name = op.name.c_str();
+                        const int index = SDL_JoystickAttachVirtualEx(&desc);
+                        logf("auto: virtual pad '%s' -> device %d %s", op.name.c_str(), index, index < 0 ? SDL_GetError() : "");
+                        if (index >= 0) virtualPads.push_back(SDL_JoystickGetDeviceInstanceID(index));
+                    } else if (!virtualPads.empty()) {
+                        const SDL_JoystickID id = virtualPads.back();
+                        virtualPads.pop_back();
+                        for (int i = 0; i < SDL_NumJoysticks(); i++)
+                            if (SDL_JoystickGetDeviceInstanceID(i) == id) {
+                                SDL_JoystickDetachVirtual(i);
+                                logf("auto: virtual pad %d pulled out", int(id));
+                                break;
+                            }
+                    }
+#endif
                     break;
                 }
             }
@@ -553,6 +909,17 @@ int main(int argc, char **argv)
                     screens.openPause();
                 } else {
                     applyPlayerInput(input, userSettings, game); // O23: src/ui/controls.cpp, one or two players
+#ifdef _WIN32
+                    // the mouse / a finger on the play field drives player one; the release comes a step after the
+                    // squat at the earliest, as it does for a button
+                    if (touchBeginPending) {
+                        game.beginMoveWithDirection(0);
+                        touchBeginPending = false;
+                    } else if (touchReleasePending) {
+                        game.moveWithDirection(touchDir, 0);
+                        touchReleasePending = false;
+                    }
+#endif
                 }
                 break;
             case GameState::GameOver:
@@ -572,6 +939,10 @@ int main(int argc, char **argv)
             }
         }
         paused = screens.pausesGame();
+#ifdef _WIN32
+        if (game.state() != GameState::Playing || screens.menu() != Menu::None)
+            touchBeginPending = touchReleasePending = false; // a hop that no longer has a game to happen in
+#endif
 
         if (!paused) {
             game.step();
@@ -650,6 +1021,12 @@ int main(int argc, char **argv)
     while (running) {
         if (!platform.pump()) break;
         input.handleEvents(platform.events());
+        if (platform.takeResized()) relayout();
+#ifdef _WIN32
+        if (refreshControls()) settingsDirty = true; // saved as soon as the settings screen is not open
+        handlePointerEvents(platform.events());
+        arrowsAlsoForPlayerOne(input, userSettings); // the arrows always drive player one (src/ui/controls.cpp)
+#endif
 
         if (opt.fast) {
             doStep();
@@ -664,6 +1041,7 @@ int main(int argc, char **argv)
             }
         }
 
+        if (platform.takeResized()) relayout(); // a size: token in this frame's steps
         if (opt.headless) continue;
         bool wantShot = !pendingShots.empty() || !running;
         const bool statsFrame = opt.renderStats > 0 && stepsDone % opt.renderStats == 0 &&
@@ -774,6 +1152,14 @@ int main(int argc, char **argv)
     }
     logf("digest=%016llx", (unsigned long long)digest);
     if (settingsDirty) saveSettings(); // the settings screen was still open when the game ended
+    if (desktopWindow && saveConf) {
+        // Windows: the next start opens the window the way it is now
+        conf.setInt("window_fullscreen", platform.fullscreen() ? 1 : 0);
+        conf.setInt("window_maximized", platform.maximized() ? 1 : 0);
+        conf.setInt("window_w", std::max(640, platform.windowedWidth()));
+        conf.setInt("window_h", std::max(480, platform.windowedHeight()));
+        if (!conf.save(confPath)) logf("cannot save %s", confPath.c_str());
+    }
     input.shutdown();
     audio.shutdown();
     platform.shutdown();

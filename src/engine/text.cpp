@@ -2,6 +2,8 @@
 
 #ifndef CR_FIXED
 #include <cmath>
+#include <cstdio>
+#include <vector>
 #endif
 
 #include "engine/log.h"
@@ -24,6 +26,43 @@ static int nextGlyph(const std::string &text, size_t &i)
     return more ? -1 : glyphSlot(cp);
 }
 
+#ifndef CR_FIXED
+// the baked face (data/fonts/retro_<n>.fnt) whose size is nearest to `want` real pixels, 0 when none is within 12%.
+// Which sizes exist is looked up once per data directory.
+static int nearestBakedSize(const std::string &dataDir, float want)
+{
+    static std::string scannedDir;
+    static std::vector<int> baked;
+    if (scannedDir != dataDir) {
+        scannedDir = dataDir;
+        baked.clear();
+        for (int n = 4; n <= 256; n++) {
+            FILE *f = std::fopen((dataDir + "fonts/retro_" + toString(n) + ".fnt").c_str(), "rb");
+            if (!f) continue;
+            std::fclose(f);
+            baked.push_back(n);
+        }
+    }
+    int best = 0;
+    float bestErr = 0.12f;
+    for (int n : baked) {
+        const float err = std::fabs(float(n) - want) / want;
+        // a tie goes to the smaller face: a label a pixel too narrow never runs into its neighbour
+        if (err < bestErr - 1e-4f) {
+            best = n;
+            bestErr = err;
+        }
+    }
+    return best;
+}
+
+void TextRenderer::release(Renderer &renderer)
+{
+    for (auto &kv : fonts_) renderer.releaseTexture(kv.second.texture);
+    fonts_.clear();
+}
+#endif
+
 bool TextRenderer::load(Renderer &renderer, const std::string &dataDir)
 {
     for (int size : kSizes) {
@@ -37,6 +76,15 @@ bool TextRenderer::load(Renderer &renderer, const std::string &dataDir)
                 font.texture = renderer.uploadAlphaTexture(font.data.atlasW, font.data.atlasH, font.data.coverage.data());
                 fonts_[size] = std::move(font);
                 continue;
+            }
+            if (nearestFace) {
+                const int near = nearestBakedSize(dataDir, float(size) * pixelScale);
+                if (near > size && loadFont(dataDir + "fonts/retro_" + toString(near) + ".fnt", font.data)) {
+                    font.scale = pixelScale; // drawn 1:1 on the real pixels, its metrics / pixelScale
+                    font.texture = renderer.uploadAlphaTexture(font.data.atlasW, font.data.atlasH, font.data.coverage.data());
+                    fonts_[size] = std::move(font);
+                    continue;
+                }
             }
             logf("text: no retro_%d.fnt for size %d at scale %.2f, the 1x font is magnified", hi, size, pixelScale);
         }

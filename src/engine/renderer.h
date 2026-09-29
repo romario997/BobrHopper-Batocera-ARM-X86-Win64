@@ -50,8 +50,12 @@ public:
     // frees the buffers (no-op for an empty mesh) and resets it
     void releaseMesh(GpuMesh &mesh);
     GpuTexture uploadTexture(const TextureData &tex);
+    // frees the texture (no-op for an empty one) and resets it - fonts are reloaded when a desktop window is resized
+    void releaseTexture(GpuTexture &tex);
 
     bool createTarget(RenderTarget &target, int width, int height);
+    // frees the FBO and its attachments (a hidden run that resizes its "window" makes a new one)
+    void releaseTarget(RenderTarget &target);
     // nullptr = default framebuffer
     void bindTarget(const RenderTarget *target);
     void viewport(int x, int y, int w, int h, bool scissor = false);

@@ -21,6 +21,8 @@ enum Str {
     // the characters' names (the ones that are words, not names), the Amiga's PLAY box and its quit question
     CharBeaver, CharChicken, CharBacon, Play, QuitGame, QuitHint,
     NightMode,
+    // Windows: the pad a player chose has been unplugged (shown as "2: NOT CONNECTED")
+    PadMissing,
     Count
 };
 

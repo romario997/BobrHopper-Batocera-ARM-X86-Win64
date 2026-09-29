@@ -111,10 +111,29 @@ int main()
     check(in.deviceDown(3, ActRight) && !in.deviceDown(3, ActUp), "both sticks: player one has only its own");
     check(in.deviceDown(4, ActUp) && !in.deviceDown(4, ActRight), "both sticks: player two has only its own");
 
-    SDL_JoystickClose(a);
+    // --- hot-plug (the Windows build lists pads by name and they come and go): pad two is pulled out, its slot
+    // empties and nothing of it stays pressed; a new pad then takes that free slot, and pad one never moves
+    SDL_JoystickSetVirtualAxis(a, 0, 0);
+    SDL_JoystickSetVirtualAxis(b, 1, 0);
+    pump(in);
+    SDL_JoystickSetVirtualButton(b, 0, SDL_PRESSED);
+    pump(in);
+    const unsigned before = in.padsChanged();
     SDL_JoystickClose(b);
-    SDL_JoystickDetachVirtual(slotA);
     SDL_JoystickDetachVirtual(slotB);
+    pump(in);
+    pump(in);
+    check(!in.padConnected(1) && in.padConnected(0), "pad 2 pulled out: its slot is free, pad 1 stays");
+    check(in.padCount() == 1 && in.padsChanged() != before, "pad 2 pulled out: one pad left, change reported");
+    check(!in.deviceDown(4, ActA) && !in.down(ActA), "pad 2 pulled out: its held button is let go");
+    const int slotC = SDL_JoystickAttachVirtual(SDL_JOYSTICK_TYPE_GAMECONTROLLER, 2, 8, 1);
+    pump(in);
+    pump(in);
+    check(slotC >= 0 && in.padConnected(1) && in.padCount() == 2, "a new pad plugged in takes the free slot");
+    check(!in.padName(1).empty(), "and has a name for the settings list");
+
+    SDL_JoystickClose(a);
+    SDL_JoystickDetachVirtual(slotA);
     in.shutdown();
     SDL_Quit();
 

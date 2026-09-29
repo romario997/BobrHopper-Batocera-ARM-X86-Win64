@@ -1,0 +1,74 @@
+Bóbr Hopper dla Windows - {VERSION}
+==================================
+
+URUCHOMIENIE
+Rozpakuj ZIP w dowolne miejsce (np. na Pulpit) i uruchom BobrHopper.exe. Instalacja nie jest potrzebna.
+Obok BobrHopper.exe muszą leżeć SDL2.dll i folder data.
+Gra startuje w oknie 1280x720. Okno można dowolnie zmieniać (najmniej 640x480) i maksymalizować.
+  Alt+Enter albo F11   pełny ekran / okno
+Przy następnym starcie gra otwiera się tak, jak została zamknięta (rozmiar okna albo pełny ekran).
+
+STEROWANIE - KLAWIATURA
+  Strzałki             skok (wciśnięcie = przysiad, puszczenie = skok)
+  Enter / Spacja / Z   skok do przodu, wybór w menu (przycisk A)
+  X / Backspace        powrót (przycisk B)
+  Esc / P              pauza (Start)
+  Tab                  ustawienia (Select)
+  Tab + Esc            wyjście z gry (albo zamknij okno)
+  Tab + Q              licznik FPS
+Jeden gracz: działają wszystkie klawisze i wszystkie pady naraz.
+
+STEROWANIE - PAD
+  Krzyżak / lewa gałka skok     A  skok do przodu / wybór     B  powrót
+  Start                pauza    Back/Select  ustawienia
+Pady można podłączać i odłączać w trakcie gry.
+
+DWÓCH GRACZY
+Ustawienia -> GRACZE: 2 GRACZE. Potem STEROWANIE G1 i STEROWANIE G2 - do wyboru:
+STRZAŁKI (ARROWS), WSAD (z lewym Shift/Ctrl jako A) i każdy podłączony pad pod swoją nazwą
+(np. "1: XBOX 360 CONTROLLER"). Pad, który odłączono, pokazuje się jako "ODŁĄCZONY".
+Strzałki (z Enterem i Spacją) zawsze sterują graczem 1, niezależnie od wybranego urządzenia -
+chyba że gracz 2 wybrał strzałki.
+
+USTAWIENIA I REKORD
+Zapisywane w conf\crossy.cfg obok BobrHopper.exe. Jeśli tamten folder nie pozwala na zapis
+(np. C:\Program Files), gra zapisuje do %APPDATA%\BobrHopper\conf\crossy.cfg.
+Dziennik (log) trafia w to samo miejsce: bobrhopper.log.
+
+
+Bobr Hopper for Windows - {VERSION}
+==================================
+
+RUNNING
+Extract the ZIP anywhere (e.g. the Desktop) and run BobrHopper.exe. No installation needed.
+SDL2.dll and the data folder must stay next to BobrHopper.exe.
+The game starts in a 1280x720 window. The window can be resized freely (640x480 at least) and maximized.
+  Alt+Enter or F11     fullscreen / window
+The next start opens the game the way it was closed (window size or fullscreen).
+
+CONTROLS - KEYBOARD
+  Arrow keys           hop (press = crouch, release = hop)
+  Enter / Space / Z    hop forward, menu select (A button)
+  X / Backspace        back (B button)
+  Esc / P              pause (Start)
+  Tab                  settings (Select)
+  Tab + Esc            quit (or close the window)
+  Tab + Q              FPS counter
+One player: every key and every pad works at once.
+
+CONTROLS - GAMEPAD
+  D-pad / left stick   hop      A  hop forward / select       B  back
+  Start                pause    Back/Select  settings
+Pads can be plugged in and out while the game runs.
+
+TWO PLAYERS
+Settings -> PLAYERS: 2 PLAYERS. Then CONTROL P1 and CONTROL P2 - choose from:
+ARROWS, WSAD (left Shift/Ctrl as A) and every connected pad by its own name
+(e.g. "1: XBOX 360 CONTROLLER"). A pad that was unplugged shows as "NOT CONNECTED".
+The arrow keys (with Enter and Space) always drive player 1, whatever device is chosen -
+unless player 2 picked the arrows.
+
+SETTINGS AND BEST SCORE
+Saved in conf\crossy.cfg next to BobrHopper.exe. If that folder cannot be written
+(e.g. C:\Program Files), the game saves to %APPDATA%\BobrHopper\conf\crossy.cfg instead.
+The log goes to the same place: bobrhopper.log.

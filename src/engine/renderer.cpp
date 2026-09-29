@@ -373,6 +373,20 @@ void Renderer::endOverlay()
     glEnable(GL_CULL_FACE);
 }
 
+void Renderer::releaseTexture(GpuTexture &tex)
+{
+    if (tex.id) glDeleteTextures(1, &tex.id);
+    tex = GpuTexture();
+}
+
+void Renderer::releaseTarget(RenderTarget &t)
+{
+    if (t.fbo) glDeleteFramebuffers(1, &t.fbo);
+    if (t.depth) glDeleteRenderbuffers(1, &t.depth);
+    if (t.color) glDeleteTextures(1, &t.color);
+    t = RenderTarget();
+}
+
 bool Renderer::createTarget(RenderTarget &t, int width, int height)
 {
     t.width = width;

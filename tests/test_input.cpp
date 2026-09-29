@@ -75,6 +75,33 @@ int main()
         check(playerDevice(s, 0) != playerDevice(s, 1), "and the two are never the same device");
     }
 
+    // Windows: the arrows always drive player one, on top of the device player one chose - but never player two's.
+    {
+        UserSettings s;
+        s.players = 2;
+        s.control[0] = 2; // player one on the first pad (device 3)
+        s.control[1] = 1; // player two on WSAD (device 2)
+        Input in;
+        in.setDevice(1, ActUp); // an arrow key
+        in.setDevice(3, 0);
+        arrowsAlsoForPlayerOne(in, s);
+        in.step();
+        check(in.devicePressed(3, ActUp), "the arrows reach player one on a pad");
+        check(!in.deviceDown(2, ActUp), "and not player two");
+        s.control[1] = 0; // player two takes the arrows: they are theirs alone
+        Input in2;
+        in2.setDevice(1, ActUp);
+        arrowsAlsoForPlayerOne(in2, s);
+        in2.step();
+        check(!in2.deviceDown(3, ActUp), "arrows chosen by player two do not reach player one");
+        s.players = 1;
+        Input in3;
+        in3.setDevice(1, ActLeft);
+        arrowsAlsoForPlayerOne(in3, s);
+        in3.step();
+        check(!in3.deviceDown(3, ActLeft), "one player: nothing is copied (device 0 reads everything anyway)");
+    }
+
     if (failures) {
         std::printf("test_input: %d FAILED\n", failures);
         return 1;

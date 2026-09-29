@@ -13,6 +13,26 @@ int playerDevice(const UserSettings &settings, int player)
     return d > 0 && d < kInputDevices ? d : 0;
 }
 
+void arrowsAlsoForPlayerOne(Input &input, const UserSettings &settings)
+{
+    if (settings.players < 2) return;
+    const int d1 = playerDevice(settings, 0), d2 = playerDevice(settings, 1);
+    if (d1 > 1 && d2 != 1) input.setDevice(d1, uint16_t(input.deviceLive(d1) | input.deviceLive(1)));
+}
+
+bool fallBackFromMissingPads(UserSettings &settings, const bool *available, int count)
+{
+    bool changed = false;
+    for (int p = 0; p < 2; p++) {
+        int &c = settings.control[p];
+        if (c >= 0 && c < count && available[c]) continue;
+        const int own = p == 0 ? 0 : 1, other = settings.control[p == 0 ? 1 : 0];
+        c = other == own ? 1 - own : own;
+        changed = true;
+    }
+    return changed;
+}
+
 void applyPlayerInput(const Input &input, const UserSettings &settings, Game &game)
 {
     // the original's GestureView: a key going down starts the squat, letting it go performs the hop. A is a hop

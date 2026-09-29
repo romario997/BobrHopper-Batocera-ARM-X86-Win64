@@ -18,7 +18,14 @@ static uint16_t keyAction(SDL_Keycode k)
     case SDLK_RIGHT: case SDLK_d: return ActRight;
     case SDLK_SPACE: case SDLK_RETURN: case SDLK_z: return ActA;
     case SDLK_x: case SDLK_BACKSPACE: return ActB;
+#ifdef _WIN32
+    // Windows: Esc is also B - a PC player expects it to go back in every menu. The pause menu counts B's release only
+    // after a press it saw itself (Screens::bSeen_), so the Esc that opened it does not close it again.
+    case SDLK_ESCAPE: return ActStart | ActB;
+    case SDLK_p: return ActStart;
+#else
     case SDLK_ESCAPE: case SDLK_p: return ActStart;
+#endif
     case SDLK_TAB: return ActSelect;
     case SDLK_q: return ActL;
     case SDLK_e: return ActR;
@@ -89,23 +96,64 @@ void Input::init()
     for (int i = 0; i < n; i++) openController(i);
 }
 
-// O23: the slot a pad event belongs to, by SDL's instance id. -1 for a third pad, which nothing reads.
+// O23: the slot a pad event belongs to, by SDL's instance id. -1 for a pad beyond the slots, which only device 0 reads.
 int Input::padSlot(int32_t which) const
 {
-    for (size_t i = 0; i < padIds_.size() && i < 2; i++)
-        if (padIds_[i] == which) return int(i);
+    for (int i = 0; i < kMaxPads; i++)
+        if (padIds_[i] == which) return i;
     return -1;
 }
 
-int Input::padCount() const { return int(padIds_.size() > 2 ? 2 : padIds_.size()); }
+int Input::padCount() const
+{
+    int n = 0;
+    for (int i = 0; i < kMaxPads; i++) n += padIds_[i] >= 0 ? 1 : 0;
+    return n;
+}
+
+bool Input::padConnected(int slot) const { return slot >= 0 && slot < kMaxPads && padIds_[slot] >= 0; }
+
+std::string Input::padName(int slot) const
+{
+    if (!padConnected(slot)) return std::string();
+    if (SDL_GameController *gc = SDL_GameControllerFromInstanceID(padIds_[slot])) {
+        const char *n = SDL_GameControllerName(gc);
+        return n ? n : "";
+    }
+    if (SDL_Joystick *js = SDL_JoystickFromInstanceID(padIds_[slot])) {
+        const char *n = SDL_JoystickName(js);
+        return n ? n : "";
+    }
+    return std::string();
+}
+
+// the first free slot, in the order pads were opened - so the first two pads are devices 3 and 4, as they always were
+void Input::assignSlot(int32_t instanceId)
+{
+    for (int i = 0; i < kMaxPads; i++) {
+        if (padIds_[i] >= 0) continue;
+        padIds_[i] = instanceId;
+        padBtn_[i] = padStick_[i] = padHat_[i] = padRaw_[i] = 0;
+        axisState_[i][0] = axisState_[i][1] = 0;
+        break;
+    }
+    padGeneration_++;
+}
 
 void Input::openController(int index)
 {
+    // hot-plug (and the ADDED events SDL queues at start-up for pads init() already opened): never twice. Asked of
+    // this Input's own handles, not of SDL - a pad somebody else opened (test_two_pads) is still ours to open.
+    const SDL_JoystickID id = SDL_JoystickGetDeviceInstanceID(index);
+    for (void *gc : controllers_)
+        if (SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(static_cast<SDL_GameController *>(gc))) == id) return;
+    for (void *js : joysticks_)
+        if (SDL_JoystickInstanceID(static_cast<SDL_Joystick *>(js)) == id) return;
     if (SDL_IsGameController(index)) {
         SDL_GameController *gc = SDL_GameControllerOpen(index);
         if (gc) {
             controllers_.push_back(gc);
-            padIds_.push_back(SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(gc)));
+            assignSlot(SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(gc)));
             char *mapping = SDL_GameControllerMapping(gc);
             logf("input: controller %d '%s' mapping: %s", index, SDL_GameControllerName(gc), mapping ? mapping : "-");
             SDL_free(mapping);
@@ -115,10 +163,42 @@ void Input::openController(int index)
     SDL_Joystick *js = SDL_JoystickOpen(index);
     if (js) {
         joysticks_.push_back(js);
-        padIds_.push_back(SDL_JoystickInstanceID(js));
+        assignSlot(SDL_JoystickInstanceID(js));
         logf("input: raw joystick %d '%s' buttons=%d axes=%d hats=%d (no controller mapping)", index,
              SDL_JoystickName(js), SDL_JoystickNumButtons(js), SDL_JoystickNumAxes(js), SDL_JoystickNumHats(js));
     }
+}
+
+// a pad was unplugged: close it, free its slot, and forget every button it held (they would stay pressed for good)
+void Input::closePad(int32_t instanceId)
+{
+    bool found = false;
+    for (size_t i = 0; i < controllers_.size(); i++) {
+        SDL_GameController *gc = static_cast<SDL_GameController *>(controllers_[i]);
+        if (SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(gc)) != instanceId) continue;
+        logf("input: controller '%s' removed", SDL_GameControllerName(gc));
+        SDL_GameControllerClose(gc);
+        controllers_.erase(controllers_.begin() + long(i));
+        found = true;
+        break;
+    }
+    for (size_t i = 0; !found && i < joysticks_.size(); i++) {
+        SDL_Joystick *js = static_cast<SDL_Joystick *>(joysticks_[i]);
+        if (SDL_JoystickInstanceID(js) != instanceId) continue;
+        logf("input: raw joystick '%s' removed", SDL_JoystickName(js));
+        SDL_JoystickClose(js);
+        joysticks_.erase(joysticks_.begin() + long(i));
+        found = true;
+    }
+    if (!found) return;
+    const int slot = padSlot(instanceId);
+    if (slot >= 0) {
+        padIds_[slot] = -1;
+        padBtn_[slot] = padStick_[slot] = padHat_[slot] = padRaw_[slot] = 0;
+        axisState_[slot][0] = axisState_[slot][1] = 0;
+    }
+    pad_ = stick_ = hat_ = rawButtons_ = 0;
+    padGeneration_++;
 }
 
 void Input::shutdown()
@@ -128,7 +208,7 @@ void Input::shutdown()
     for (void *js : joysticks_) SDL_JoystickClose(static_cast<SDL_Joystick *>(js));
     controllers_.clear();
     joysticks_.clear();
-    padIds_.clear();
+    for (int i = 0; i < kMaxPads; i++) padIds_[i] = -1;
 }
 
 void Input::handleEvents(const std::vector<SDL_Event> &events)
@@ -232,8 +312,12 @@ void Input::handleEvents(const std::vector<SDL_Event> &events)
             break;
         }
         case SDL_CONTROLLERDEVICEADDED:
-            if (!SDL_GameControllerFromInstanceID(SDL_JoystickGetDeviceInstanceID(ev.cdevice.which)))
-                openController(ev.cdevice.which);
+        case SDL_JOYDEVICEADDED: // a pad without a mapping only sends this one; openController never opens twice
+            openController(ev.type == SDL_JOYDEVICEADDED ? ev.jdevice.which : ev.cdevice.which);
+            break;
+        case SDL_CONTROLLERDEVICEREMOVED:
+        case SDL_JOYDEVICEREMOVED: // both arrive for a controller; the second finds nothing left to close
+            closePad(ev.type == SDL_JOYDEVICEREMOVED ? ev.jdevice.which : ev.cdevice.which);
             break;
         default:
             break;
@@ -243,7 +327,7 @@ void Input::handleEvents(const std::vector<SDL_Event> &events)
     // A single player reads device 0, which is all of them together, so this changes nothing for one player.
     setDevice(1, keysArrows_);
     setDevice(2, keysWasd_);
-    for (int slot = 0; slot < 2; slot++)
+    for (int slot = 0; slot < kMaxPads; slot++)
         setDevice(3 + slot, uint16_t(padBtn_[slot] | padStick_[slot] | padHat_[slot] | padRaw_[slot]));
 }
 

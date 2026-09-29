@@ -40,6 +40,7 @@ void Screens::openPause()
 {
     menu_ = Menu::Pause;
     cursor_ = 0;
+    bSeen_ = false;
 }
 
 void Screens::openSettings(bool fromPause)
@@ -149,6 +150,9 @@ bool Screens::handleInput(const Input &in, UserSettings &s, MenuResult &out)
     }
     // Button: button_in when pressed, button_out when released
     if (in.pressed(ActA) || in.pressed(ActB)) sound("button_in");
+    if (in.pressed(ActB)) bSeen_ = true;
+    const bool bReleased = in.released(ActB) && bSeen_;
+    if (in.released(ActB)) bSeen_ = false;
     SettingsItem items[SetItemCount];
     const int settingsCount = menu_ == Menu::Settings ? settingsItems(s, items) : 0;
     const int count = menu_ == Menu::Pause ? 4 : settingsCount;
@@ -157,8 +161,8 @@ bool Screens::handleInput(const Input &in, UserSettings &s, MenuResult &out)
     if (in.pressed(ActDown)) cursor_ = (cursor_ + 1) % count;
 
     if (menu_ == Menu::Pause) {
-        if ((in.pressed(ActStart) && !in.down(ActSelect)) || in.released(ActB)) {
-            if (in.released(ActB)) sound("button_out");
+        if ((in.pressed(ActStart) && !in.down(ActSelect)) || bReleased) {
+            if (bReleased) sound("button_out");
             menu_ = Menu::None;
             out.resume = true;
         } else if (in.released(ActA)) {
@@ -228,8 +232,11 @@ bool Screens::handleInput(const Input &in, UserSettings &s, MenuResult &out)
         s.askPlayers = state == 2;
         if (state == 0) s.players = 1;
         else if (state == 1) s.players = 2;
-        if ((s.players > 1 || s.askPlayers) && controlCount > 1 && s.control[1] == s.control[0])
+        if ((s.players > 1 || s.askPlayers) && controlCount > 1 && s.control[1] == s.control[0]) {
             s.control[1] = (s.control[0] + 1) % controlCount;
+            for (int k = 0; k < controlCount && !controlUsable(s.control[1]); k++)
+                s.control[1] = (s.control[1] + 1) % controlCount;
+        }
         break;
     }
     case SetRespawn: s.infiniteRespawn = !s.infiniteRespawn; break;
@@ -241,6 +248,7 @@ bool Screens::handleInput(const Input &in, UserSettings &s, MenuResult &out)
         // step on to the next device, stepping over the one the other player is using
         for (int k = 0; k < controlCount; k++) {
             v = (v + dir + controlCount) % controlCount;
+            if (!controlUsable(v)) continue; // Windows: a pad slot with nothing plugged in
             if (s.players < 2 || v != s.control[other]) break;
         }
         changed = v != s.control[p];
@@ -302,6 +310,7 @@ void Screens::draw(Renderer &renderer, TextRenderer &text, const Game &game, int
     const bool covered = solidMenus && (menu_ == Menu::Pause || menu_ == Menu::Settings);
     if (!covered && game.state() == GameState::None) drawHome(renderer, text, screenW, screenH);
     if (!covered && game.state() == GameState::GameOver) drawGameOver(renderer, text, game, screenW, screenH);
+    if (pointerUi && menu_ == Menu::None && game.state() == GameState::Playing) drawPauseButton(renderer, screenW);
     if (menu_ == Menu::Pause) drawPause(renderer, text, screenW, screenH);
     if (menu_ == Menu::Settings) drawSettings(renderer, text, screenW, screenH);
     renderer.endOverlay();
@@ -364,7 +373,7 @@ void Screens::drawPause(Renderer &renderer, TextRenderer &text, int w, int h)
         if (i == cursor_) selectionBar(renderer, w, y, 18);
         centred(renderer, text, lang::t(items[i]), w, y, 18, kWhite, 2);
     }
-    centred(renderer, text, lang::t(lang::HintPause), w, h - 30, 12, kWhite, 2);
+    drawHint(renderer, text, lang::t(lang::HintPause), w, h - 30, 12);
 }
 
 // O23: which entries are on the screen right now. The two control entries only exist where the platform offered
@@ -482,8 +491,7 @@ void Screens::drawSettings(Renderer &renderer, TextRenderer &text, int w, int h)
     menuWindow(renderer, w, h);
     // SettingsScreen: back button (60x48 image box, contain) top-left - inside the window when it is one
     const int backY = solidMenus ? menuGapTop + 6 : 8;
-    renderer.drawOverlayImage(buttonBack_, 14, mreal(backY), 48, 48);
-    text.drawOutlined(renderer, "B", 14 + (48 - text.width("B", 12)) / 2, backY + 52, 12, kWhite, 2, kBlack);
+    drawBackButton(renderer, text, 14, backY);
     centred(renderer, text, lang::t(lang::Settings), w, 40, 32, kWhite, 3);
 
     SettingsItem items[SetItemCount];
@@ -509,13 +517,28 @@ void Screens::drawSettings(Renderer &renderer, TextRenderer &text, int w, int h)
             continue;
         }
         const std::string label = lang::t(settingsLabel(items[i]));
-        const std::string value = settingsValue(items[i], s);
+        std::string value = settingsValue(items[i], s);
         text.drawOutlined(renderer, label, left, y, size, kWhite, 2, kBlack);
-        text.drawOutlined(renderer, value, right - text.width(value, size), y, size, kWhite, 2, kBlack);
+        int valueSize = size;
+        if (controlAvailable && (items[i] == SetControl1 || items[i] == SetControl2)) {
+            // Windows: a pad's own name can be long ("XBOX 360 CONTROLLER FOR WINDOWS") - a smaller face first, then
+            // cut short, so it never runs into the label
+            const int room = right - left - text.width(label, size) - 16;
+            static const int smaller[] = {16, 14, 12};
+            for (int k = 0; k < 3 && text.width(value, valueSize) > room; k++)
+                if (text.hasSize(smaller[k])) valueSize = smaller[k];
+            while (value.size() > 3 && text.width(value, valueSize) > room) {
+                value.erase(value.size() - (value.size() > 2 && value.compare(value.size() - 2, 2, "..") == 0 ? 3 : 1));
+                while (!value.empty() && value.back() == ' ') value.pop_back();
+                value += "..";
+            }
+        }
+        const int valueY = y + (text.lineHeight(size) - text.lineHeight(valueSize)) / 2;
+        text.drawOutlined(renderer, value, right - text.width(value, valueSize), valueY, valueSize, kWhite, 2, kBlack);
     }
     if (scrollTop_ > 0) scrollArrow(renderer, w / 2, top - 24, true);
     if (scrollTop_ + rows < count) scrollArrow(renderer, w / 2, top + rows * step - 16, false);
-    centred(renderer, text, lang::t(lang::HintSettings), w, h - 30, 12, kWhite, 2);
+    drawHint(renderer, text, lang::t(lang::HintSettings), w, h - 30, 12);
 }
 
 void Screens::drawSceneFade(Renderer &renderer, int w, int h)
@@ -610,11 +633,18 @@ void Screens::drawGameOver(Renderer &renderer, TextRenderer &text, const Game &g
     // O11.9: in Progression A carries on with the career and B goes back to the menu, so the screen says so - right
     // under the banners, where the checkerboard of the finish line does not swallow it
     if (game.level() > 0)
-        centred(renderer, text, lang::t(lang::HintLevelOver), w, blockTop + blockH + 10, 14, white, 2);
-    text.drawOutlined(renderer, "SELECT", 8 + int(settingsW - mreal(text.width("SELECT", labelSize))) / 2,
+        centred(renderer, text, hintText(lang::t(lang::HintLevelOver)), w, blockTop + blockH + 10, 14, white, 2);
+    const std::string selectLabel = buttonLabel("SELECT"), aLabel = buttonLabel("A");
+    // a long label ("SELECT/TAB") starts at the button's left edge rather than running off the screen
+    text.drawOutlined(renderer, selectLabel,
+                      std::max(8, 8 + int(settingsW - mreal(text.width(selectLabel, labelSize))) / 2), footerTop - 18,
+                      labelSize, white, 2, black);
+    text.drawOutlined(renderer, aLabel,
+                      std::min(w - 8 - text.width(aLabel, labelSize),
+                               int(mreal(w - 8) - playW + (playW - mreal(text.width(aLabel, labelSize))) / mreal(2))),
                       footerTop - 18, labelSize, white, 2, black);
-    text.drawOutlined(renderer, "A", int(mreal(w - 8) - playW + (playW - mreal(text.width("A", labelSize))) / mreal(2)),
-                      footerTop - 18, labelSize, white, 2, black);
+    // pointerUi: in Progression B goes back to the menu - a back arrow in the middle of the footer does it by touch
+    if (pointerUi && game.level() > 0) drawBackButton(renderer, text, w / 2 - 24, footerTop + (footerH - 48) / 2);
 }
 
 // O11.2: the game over screen's banners as menu items — the same bars, their blue pushed a little towards purple
@@ -682,7 +712,7 @@ void Screens::drawHome(Renderer &renderer, TextRenderer &text, int w, int h)
         drawMenuBars(renderer, text, labels, 2, homeCursor_, w, barsTop);
         }
         // above the credit line in the corner, which the hint used to run into
-        centred(renderer, text, lang::t(lang::HintHome), w, h - 48, 12, kWhite, 2);
+        drawHint(renderer, text, lang::t(lang::HintHome), w, h - 48, 12);
     } else if (homePage_ == HomePage::Players) {
         // O24: asked once, before a game starts, when the Players setting says "ask on start". The mode is already
         // chosen, so the title says which one is being set up.
@@ -691,7 +721,7 @@ void Screens::drawHome(Renderer &renderer, TextRenderer &text, int w, int h)
         centred(renderer, text, lang::t(lang::HowMany), w, barsTop - 30, 14, kYellow, 2);
         const std::string labels[2] = {lang::t(lang::OnePlayer), lang::t(lang::TwoPlayers)};
         drawMenuBars(renderer, text, labels, 2, playersCursor_, w, barsTop);
-        centred(renderer, text, lang::t(lang::HintPlayers), w, h - 48, 12, kWhite, 2);
+        drawHint(renderer, text, lang::t(lang::HintPlayers), w, h - 48, 12);
     } else if (homePage_ == HomePage::Career) {
         // O11.4: where the career stands — the level Continue starts and the rank the last finished level gave
         centred(renderer, text, std::string(lang::t(lang::Level)) + " " + levelLabel(careerLevel), w, barsTop - 56, 18,
@@ -701,13 +731,15 @@ void Screens::drawHome(Renderer &renderer, TextRenderer &text, int w, int h)
         centred(renderer, text, rank, w, barsTop - 30, 14, kYellow, 2);
         const std::string labels[2] = {lang::t(lang::Continue), lang::t(lang::NewGame)};
         drawMenuBars(renderer, text, labels, 2, careerCursor_, w, barsTop);
-        centred(renderer, text, lang::t(lang::HintCareer), w, h - 48, 12, kWhite, 2);
+        drawHint(renderer, text, lang::t(lang::HintCareer), w, h - 48, 12);
     } else {
         centred(renderer, text, lang::t(lang::DeleteProgress), w, barsTop - 44, 18, kWhite, 2);
         const std::string labels[2] = {lang::t(lang::No), lang::t(lang::Yes)};
         drawMenuBars(renderer, text, labels, 2, confirmCursor_, w, barsTop);
-        centred(renderer, text, lang::t(lang::HintConfirm), w, h - 48, 12, kWhite, 2);
+        drawHint(renderer, text, lang::t(lang::HintConfirm), w, h - 48, 12);
     }
+
+    if (pointerUi && homePage_ != HomePage::Modes) drawBackButton(renderer, text, 14, 8);
 
     const int creditSize = 12;
     text.drawOutlined(renderer, "PORT BY G. KORYCKI", 8, h - 8 - text.lineHeight(creditSize), creditSize, kWhite, 2,
@@ -717,6 +749,199 @@ void Screens::drawHome(Renderer &renderer, TextRenderer &text, int w, int h)
         text.drawOutlined(renderer, versionLabel, w - 8 - text.width(versionLabel, size), h - 8 - text.lineHeight(size),
                           size, kWhite, 2, kBlack);
     }
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Windows: keyboard names in the hints, and the mouse / touch screen (Screens::keyboardHints, Screens::pointerUi)
+
+std::string Screens::buttonLabel(const char *button) const
+{
+    const std::string b = button;
+    if (!keyboardHints) return b;
+    // the keys input_sdl.cpp gives these buttons (keyAction / arrowsAction): A is also Space and Z, B also Backspace
+    if (b == "A") return "A/ENTER";
+    if (b == "B") return "B/ESC";
+    if (b == "SELECT") return "SELECT/TAB";
+    if (b == "START") return "START/P";
+    return b;
+}
+
+std::string Screens::hintText(const std::string &hint) const
+{
+    if (!keyboardHints) return hint;
+    std::string out;
+    size_t pos = 0;
+    while (pos <= hint.size()) {
+        size_t end = hint.find("   ", pos);
+        if (end == std::string::npos) end = hint.size();
+        const std::string part = hint.substr(pos, end - pos);
+        const size_t space = part.find(' ');
+        const std::string first = part.substr(0, space);
+        out += buttonLabel(first.c_str());
+        if (space != std::string::npos) out += part.substr(space);
+        if (end >= hint.size()) break;
+        out += "   ";
+        pos = end + 3;
+    }
+    return out;
+}
+
+void Screens::drawHint(Renderer &renderer, TextRenderer &text, const std::string &hint, int w, int y, int size) const
+{
+    const std::string line = hintText(hint);
+    if (!keyboardHints || text.width(line, size) <= w - 16) {
+        centred(renderer, text, line, w, y, size, kWhite, 2);
+        return;
+    }
+    // two lines, split at the part boundary nearest the middle
+    size_t best = std::string::npos;
+    for (size_t at = line.find("   "); at != std::string::npos; at = line.find("   ", at + 3)) {
+        const long d = long(at) - long(line.size() / 2), bd = long(best) - long(line.size() / 2);
+        if (best == std::string::npos || (d < 0 ? -d : d) < (bd < 0 ? -bd : bd)) best = at;
+    }
+    if (best == std::string::npos) {
+        centred(renderer, text, line, w, y, size, kWhite, 2);
+        return;
+    }
+    const int lh = text.lineHeight(size);
+    centred(renderer, text, line.substr(0, best), w, y - lh - 3, size, kWhite, 2);
+    centred(renderer, text, line.substr(best + 3), w, y, size, kWhite, 2);
+}
+
+void Screens::drawBackButton(Renderer &renderer, TextRenderer &text, int x, int y) const
+{
+    renderer.drawOverlayImage(buttonBack_, mreal(x), mreal(y), 48, 48);
+    const std::string label = buttonLabel("B");
+    text.drawOutlined(renderer, label, std::max(2, x + (48 - text.width(label, 12)) / 2), y + 52, 12, kWhite, 2, kBlack);
+}
+
+// two white bars on a dark square at the top in the middle, where no HUD text is in any mode
+static const int kPauseSize = 44, kPauseTop = 8;
+void Screens::drawPauseButton(Renderer &renderer, int w) const
+{
+    const int x = w / 2 - kPauseSize / 2;
+    renderer.drawOverlayRect(mreal(x), mreal(kPauseTop), mreal(kPauseSize), mreal(kPauseSize), 0, 0, 0, 0.35f);
+    renderer.drawOverlayRect(mreal(x + 13), mreal(kPauseTop + 11), 6, 22, 1, 1, 1, 1);
+    renderer.drawOverlayRect(mreal(x + 25), mreal(kPauseTop + 11), 6, 22, 1, 1, 1, 1);
+}
+
+enum PointerHit { kHitNone, kHitField, kHitPause, kHitBack, kHitHomeBar, kHitSettingsGear, kHitPlay, kHitPauseRow,
+                  kHitSettingsRow, kHitScrollUp, kHitScrollDown, kHitMenuBackground };
+
+static bool inside(int x, int y, int rx, int ry, int rw, int rh) { return x >= rx && x < rx + rw && y >= ry && y < ry + rh; }
+
+int Screens::pointerHit(int x, int y, const Game &game, int w, int h, int *index) const
+{
+    *index = 0;
+    if (menu_ == Menu::Pause) {
+        for (int i = 0; i < 4; i++)
+            if (y >= 180 + i * 44 - 10 && y < 180 + i * 44 + 34) {
+                *index = i;
+                return kHitPauseRow;
+            }
+        return kHitMenuBackground;
+    }
+    if (menu_ == Menu::Settings) {
+        const int backY = solidMenus ? menuGapTop + 6 : 8;
+        if (inside(x, y, 0, backY - 8, 90, 48 + 32)) return kHitBack;
+        static const UserSettings defaults;
+        SettingsItem items[SetItemCount];
+        const int count = settingsItems(settings ? *settings : defaults, items);
+        const int rows = visibleRows(h), top = 96, step = 42;
+        if (scrollTop_ > 0 && inside(x, y, w / 2 - 50, top - 36, 100, 34)) return kHitScrollUp;
+        if (scrollTop_ + rows < count && inside(x, y, w / 2 - 50, top + rows * step - 22, 100, 30)) return kHitScrollDown;
+        for (int r = 0; r < rows && scrollTop_ + r < count; r++)
+            if (y >= top + r * step - 8 && y < top + r * step + 34) {
+                *index = scrollTop_ + r;
+                return kHitSettingsRow;
+            }
+        return kHitMenuBackground;
+    }
+    if (game.state() == GameState::Playing) {
+        if (pointerUi && inside(x, y, w / 2 - kPauseSize / 2 - 8, 0, kPauseSize + 16, kPauseTop + kPauseSize + 8))
+            return kHitPause;
+        return kHitField;
+    }
+    if (game.state() == GameState::GameOver) {
+        const int footerH = 56, footerTop = h - 8 - footerH;
+        const int settingsW = footerH * 5 / 4, playW = footerH * 19 / 10;
+        if (inside(x, y, 0, footerTop - 22, 8 + settingsW + 16, h)) return kHitSettingsGear;
+        if (inside(x, y, w - 8 - playW - 16, footerTop - 22, playW + 24, h)) return kHitPlay;
+        if (pointerUi && game.level() > 0 && inside(x, y, w / 2 - 40, footerTop - 4, 80, footerH + 12)) return kHitBack;
+        return kHitNone;
+    }
+    if (game.state() == GameState::None && lastState_ == int(GameState::None)) {
+        if (pointerUi && homePage_ != HomePage::Modes && inside(x, y, 0, 0, 90, 48 + 32)) return kHitBack;
+        const bool three = homePage_ == HomePage::Modes && homeSettings;
+        const int top = three ? 250 : 300, barH = three ? 42 : 48, gap = three ? 8 : 14, count = three ? 3 : 2;
+        for (int i = 0; i < count; i++)
+            if (y >= top + i * (barH + gap) - gap / 2 && y < top + i * (barH + gap) + barH + gap / 2) {
+                *index = i;
+                return kHitHomeBar;
+            }
+    }
+    return kHitNone;
+}
+
+bool Screens::pointerOnUi(int x, int y, const Game &game, int w, int h) const
+{
+    int index = 0;
+    return pointerHit(x, y, game, w, h, &index) != kHitField;
+}
+
+int Screens::pointerTap(int x, int y, const Game &game, int w, int h)
+{
+    int index = 0;
+    const int hit = pointerHit(x, y, game, w, h, &index);
+    switch (hit) {
+    case kHitField: return kPointerField;
+    case kHitPause: return ActStart;
+    case kHitBack: return ActB;
+    case kHitSettingsGear: return ActSelect;
+    case kHitPlay: return ActA;
+    case kHitPauseRow:
+        cursor_ = index;
+        return ActA;
+    case kHitScrollUp: pointerScroll(-1, h); return 0;
+    case kHitScrollDown: pointerScroll(1, h); return 0;
+    case kHitSettingsRow: {
+        static const UserSettings defaults;
+        SettingsItem items[SetItemCount];
+        settingsItems(settings ? *settings : defaults, items);
+        const bool wasSelected = cursor_ == index;
+        cursor_ = index;
+        if (items[index] == SetBack) return ActB;
+        // the value's side changes it forwards; the label's side picks the row, and on the row already picked steps
+        // the value back - so every value can go both ways by touch
+        if (x >= w / 2) return ActRight;
+        return wasSelected ? ActLeft : 0;
+    }
+    case kHitHomeBar: {
+        int &cursor = homePage_ == HomePage::Modes     ? homeCursor_
+                      : homePage_ == HomePage::Players ? playersCursor_
+                      : homePage_ == HomePage::Career  ? careerCursor_
+                                                       : confirmCursor_;
+        cursor = index;
+        return ActA;
+    }
+    default: return 0;
+    }
+}
+
+void Screens::pointerScroll(int rows, int h)
+{
+    if (menu_ == Menu::Pause) {
+        cursor_ = std::max(0, std::min(3, cursor_ + rows));
+        return;
+    }
+    if (menu_ != Menu::Settings) return;
+    static const UserSettings defaults;
+    SettingsItem items[SetItemCount];
+    const int count = settingsItems(settings ? *settings : defaults, items);
+    const int visible = visibleRows(h);
+    scrollTop_ = std::max(0, std::min(std::max(0, count - visible), scrollTop_ + rows));
+    if (cursor_ < scrollTop_) cursor_ = scrollTop_;
+    if (cursor_ > scrollTop_ + visible - 1) cursor_ = scrollTop_ + visible - 1;
 }
 
 } // namespace cr

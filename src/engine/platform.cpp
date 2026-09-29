@@ -69,7 +69,12 @@ bool Platform::init(const PlatformConfig &cfg)
     Uint32 flags = SDL_WINDOW_OPENGL;
     if (cfg.fullscreen) flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
     if (cfg.hidden) flags |= SDL_WINDOW_HIDDEN;
+    if (cfg.resizable && !cfg.hidden) flags |= SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI;
+    if (cfg.maximized && !cfg.hidden) flags |= SDL_WINDOW_MAXIMIZED;
     int ww = cfg.hidden ? 64 : cfg.width, wh = cfg.hidden ? 64 : cfg.height;
+    fullscreenToggle_ = cfg.fullscreenToggle && !cfg.hidden;
+    winW_ = cfg.width;
+    winH_ = cfg.height;
 
     for (int attempt = 0; attempt < 2 && !ctx_; attempt++) {
         bool es = attempt == 0;
@@ -97,8 +102,11 @@ bool Platform::init(const PlatformConfig &cfg)
         return false;
     }
     SDL_GL_SetSwapInterval(cfg.vsync ? 1 : 0);
+    if (cfg.resizable && !cfg.hidden && cfg.minWidth > 0 && cfg.minHeight > 0)
+        SDL_SetWindowMinimumSize(win_, cfg.minWidth, cfg.minHeight);
     // Batocera PC runs the game fullscreen on X11, where the desktop's pointer would sit in the middle of the picture
-    if (cfg.fullscreen) SDL_ShowCursor(SDL_DISABLE);
+    // (the Windows window keeps it: the mouse and the touch screen work the menus there)
+    if (cfg.fullscreen && !cfg.fullscreenToggle) SDL_ShowCursor(SDL_DISABLE);
     SDL_GL_GetDrawableSize(win_, &w_, &h_);
     if (cfg.hidden) {
         w_ = cfg.width;
@@ -125,6 +133,61 @@ void Platform::shutdown()
     SDL_Quit();
 }
 
+void Platform::updateDrawableSize()
+{
+    if (!win_ || hidden_) return;
+    int w = 0, h = 0;
+    SDL_GL_GetDrawableSize(win_, &w, &h);
+    if (w <= 0 || h <= 0) return; // minimized
+    if (w != w_ || h != h_) {
+        logf("platform: drawable %dx%d -> %dx%d%s", w_, h_, w, h, fullscreen() ? " (fullscreen)" : "");
+        w_ = w;
+        h_ = h;
+        resized_ = true;
+    }
+    if (!fullscreen() && !maximized()) SDL_GetWindowSize(win_, &winW_, &winH_);
+}
+
+void Platform::requestSize(int w, int h)
+{
+    if (w <= 0 || h <= 0) return;
+    if (hidden_ || !win_) {
+        if (w != w_ || h != h_) {
+            logf("platform: hidden size %dx%d -> %dx%d", w_, h_, w, h);
+            w_ = w;
+            h_ = h;
+            resized_ = true;
+        }
+        return;
+    }
+    if (fullscreen()) SDL_SetWindowFullscreen(win_, 0);
+    SDL_RestoreWindow(win_);
+    SDL_SetWindowSize(win_, w, h);
+    updateDrawableSize();
+}
+
+bool Platform::fullscreen() const
+{
+    return win_ && (SDL_GetWindowFlags(win_) & SDL_WINDOW_FULLSCREEN) != 0;
+}
+
+bool Platform::maximized() const
+{
+    return win_ && (SDL_GetWindowFlags(win_) & SDL_WINDOW_MAXIMIZED) != 0;
+}
+
+void Platform::toggleFullscreen()
+{
+    if (!win_ || hidden_) return;
+    const bool fs = !fullscreen();
+    if (SDL_SetWindowFullscreen(win_, fs ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0) != 0) {
+        logf("platform: fullscreen %d failed: %s", fs ? 1 : 0, SDL_GetError());
+        return;
+    }
+    logf("platform: %s", fs ? "fullscreen" : "windowed");
+    updateDrawableSize();
+}
+
 bool Platform::pump()
 {
     events_.clear();
@@ -132,6 +195,24 @@ bool Platform::pump()
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
         if (ev.type == SDL_QUIT) keep = false;
+        if (ev.type == SDL_WINDOWEVENT) {
+            switch (ev.window.event) {
+            case SDL_WINDOWEVENT_SIZE_CHANGED:
+            case SDL_WINDOWEVENT_RESIZED:
+            case SDL_WINDOWEVENT_MAXIMIZED:
+            case SDL_WINDOWEVENT_RESTORED:
+            case SDL_WINDOWEVENT_SHOWN: updateDrawableSize(); break;
+            default: break;
+            }
+        }
+        // Alt+Enter / F11 (desktop): the window's own business - the game never sees these keys, so Enter here does
+        // not also confirm a menu
+        if (fullscreenToggle_ && ev.type == SDL_KEYDOWN &&
+            (((ev.key.keysym.sym == SDLK_RETURN || ev.key.keysym.sym == SDLK_KP_ENTER) && (ev.key.keysym.mod & KMOD_ALT)) ||
+             ev.key.keysym.sym == SDLK_F11)) {
+            if (!ev.key.repeat) toggleFullscreen();
+            continue;
+        }
         events_.push_back(ev);
     }
     return keep;

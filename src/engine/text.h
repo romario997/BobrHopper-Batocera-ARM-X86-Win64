@@ -32,6 +32,12 @@ public:
     // at the real resolution; its metrics count 1 / pixelScale). Without such a file that size keeps the 1x font,
     // magnified. Set before load(); 1 = exactly the old path (R36S, windowed PC at 640x480).
     float pixelScale = 1;
+    // Windows desktop (a window of any size): when no face is baked at exactly round(N * pixelScale), take the baked
+    // size nearest to it and draw it 1:1 on the real pixels - a few percent bigger or smaller than the layout's N, but
+    // crisp - instead of magnifying the 1x font by an odd factor. Off everywhere else (the consoles keep their path).
+    bool nearestFace = false;
+    // frees every loaded face; load() again after changing pixelScale (a resized window)
+    void release(Renderer &renderer);
 #endif
 
     bool hasSize(int size) const { return fonts_.count(size) != 0; }

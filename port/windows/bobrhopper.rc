@@ -1,0 +1,31 @@
+// Windows resources of the release exe (build/build_windows.sh): the icon Explorer and the taskbar show, which SDL
+// also takes for the window (the first icon in the exe), and the version block. The icon is made by
+// tools/make_windows_icon.py.
+#include <winver.h>
+
+1 ICON "bobrhopper.ico"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION 0,28,0,0
+PRODUCTVERSION 0,28,0,0
+FILEOS VOS_NT_WINDOWS32
+FILETYPE VFT_APP
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "G. Korycki"
+            VALUE "FileDescription", "Bobr Hopper"
+            VALUE "FileVersion", "v028"
+            VALUE "InternalName", "BobrHopper"
+            VALUE "OriginalFilename", "BobrHopper.exe"
+            VALUE "ProductName", "Bobr Hopper"
+            VALUE "ProductVersion", "v028"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

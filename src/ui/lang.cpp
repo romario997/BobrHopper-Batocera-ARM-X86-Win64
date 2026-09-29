@@ -83,6 +83,7 @@ static const char *const kText[Count][kLanguages] = {
     {"QUIT THE GAME?", "WYJŚĆ Z GRY?", "¿SALIR DEL JUEGO?", "LUDUM RELINQUERE?", "UKONČIT HRU?", "UKONČIŤ HRU?", "KILÉPSZ A JÁTÉKBÓL?", "IEȘI DIN JOC?", "SEGOLÖN SE PLED?", "ĈU ELIRI EL LA LUDO?"},
     {"ENTER - YES     ESC - NO", "ENTER - TAK     ESC - NIE", "ENTER - SÍ     ESC - NO", "ENTER - ITA     ESC - NON", "ENTER - ANO     ESC - NE", "ENTER - ÁNO     ESC - NIE", "ENTER - IGEN     ESC - NEM", "ENTER - DA     ESC - NU", "ENTER - SI     ESC - NO", "ENTER - JES     ESC - NE"},
     {"NIGHT MODE", "TRYB NOCNY", "MODO NOCHE", "MODUS NOCTIS", "NOČNÍ REŽIM", "NOČNÝ REŽIM", "ÉJSZAKAI MÓD", "MOD NOAPTE", "MOD NEITIK", "NOKTA REĜIMO"},
+    {"NOT CONNECTED", "ODŁĄCZONY", "DESCONECTADO", "NON CONIUNCTUM", "NEPŘIPOJENO", "NEPRIPOJENÝ", "LEVÁLASZTVA", "DECONECTAT", "NO PEYÜMÖL", "MALKONEKTITA"},
 };
 
 static int g_language = 0;

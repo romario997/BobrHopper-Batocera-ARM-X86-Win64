@@ -29,7 +29,10 @@ enum Action : uint16_t {
 // mask a single player has always played with, every keyboard and pad at once - and 1..4 are the platform's own
 // devices in the order the settings screen lists them (arrows, WSAD, joystick port 1, joystick port 2). Nothing else
 // about Input changes, so a one-player game reads device 0 and behaves exactly as before.
-static const int kInputDevices = 5;
+// Windows (a desktop with any number of pads plugged in and out): four pad slots, so devices 3..6; the consoles still
+// list only the first two (their settings hand out devices 1..4), and a slot is kept by its pad until it is unplugged.
+static const int kMaxPads = 4;
+static const int kInputDevices = 3 + kMaxPads;
 
 class Input {
 public:
@@ -55,6 +58,8 @@ public:
     {
         if (device > 0 && device < kInputDevices) devSet_[device] = mask;
     }
+    // what the platform code put on a device for the coming step (before step() latches it)
+    uint16_t deviceLive(int device) const { return device > 0 && device < kInputDevices ? devSet_[device] : 0; }
     uint16_t deviceHeld(int device) const { return device > 0 && device < kInputDevices ? devCur_[device] : cur_; }
     bool deviceDown(int device, Action a) const { return (deviceHeld(device) & a) != 0; }
     bool devicePressed(int device, Action a) const
@@ -79,6 +84,12 @@ public:
     // O23: how many pads were opened (0, 1 or 2). The app uses it to pick sensible defaults: a console with
     // two pads should hand one to each player without anybody visiting the settings screen first.
     int padCount() const;
+    // Pad slot `slot` (Input device 3 + slot): is a pad there, and SDL's name for it ("" when none). The slots are
+    // stable: a pad keeps its slot until it is unplugged, and a new one takes the first free slot (hot-plug).
+    bool padConnected(int slot) const;
+    std::string padName(int slot) const;
+    // changes whenever a pad is plugged in or out, so the app can refresh the names on the settings screen
+    unsigned padsChanged() const { return padGeneration_; }
 
 private:
     void openController(int index);
@@ -89,19 +100,23 @@ private:
     uint16_t keysArrows_ = 0, keysWasd_ = 0;
     uint16_t keys_ = 0, pad_ = 0, stick_ = 0, hat_ = 0, rawButtons_ = 0, synthetic_ = 0;
     uint16_t cur_ = 0, prev_ = 0;
-    uint16_t devSet_[kInputDevices] = {0, 0, 0, 0, 0};
-    uint16_t devCur_[kInputDevices] = {0, 0, 0, 0, 0};
-    uint16_t devPrev_[kInputDevices] = {0, 0, 0, 0, 0};
+    uint16_t devSet_[kInputDevices] = {};
+    uint16_t devCur_[kInputDevices] = {};
+    uint16_t devPrev_[kInputDevices] = {};
     std::vector<void *> controllers_; // SDL_GameController *
     std::vector<void *> joysticks_;   // SDL_Joystick *
     // O23: which pad an event came from. SDL identifies a pad by its instance id, and the id is NOT the open
     // order, so the two are kept side by side here: padIds_[slot] is the instance id of pad `slot`.
-    std::vector<int32_t> padIds_;
-    uint16_t padBtn_[2] = {0, 0}, padStick_[2] = {0, 0}, padHat_[2] = {0, 0}, padRaw_[2] = {0, 0};
+    // -1 = a free slot. A pad beyond kMaxPads is still opened and still reaches device 0, but has no slot.
+    int32_t padIds_[kMaxPads] = {-1, -1, -1, -1};
+    uint16_t padBtn_[kMaxPads] = {}, padStick_[kMaxPads] = {}, padHat_[kMaxPads] = {}, padRaw_[kMaxPads] = {};
+    unsigned padGeneration_ = 0;
+    void closePad(int32_t instanceId);
+    void assignSlot(int32_t instanceId);
     // Batocera v40 on the RG35XX H: a left stick that never reports its centre held "up" for good, so the d-pad's
     // up never changed the combined state and never hopped. An axis counts only once it has been seen inside the
-    // deadzone: [slot 0, 1, other][x, y] = 0 not seen yet, 1 seen off-centre (logged), 2 centred - trusted.
-    uint8_t axisState_[3][2] = {{0, 0}, {0, 0}, {0, 0}};
+    // deadzone: [slot 0..kMaxPads-1, other][x, y] = 0 not seen yet, 1 seen off-centre (logged), 2 centred - trusted.
+    uint8_t axisState_[kMaxPads + 1][2] = {};
     int padSlot(int32_t which) const;
 
     std::vector<uint16_t> replay_;

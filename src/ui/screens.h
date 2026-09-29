@@ -133,6 +133,27 @@ public:
     // ARROWS, WSAD, JOY 1, JOY 2). Left null on a platform with one device, and the control entries then vanish.
     const char *const *controlNames = nullptr;
     int controlCount = 0;
+    // Windows: which of those devices can be chosen right now (a pad slot with nothing plugged in cannot). Stepping
+    // through the list skips the others; a player whose pad was unplugged keeps it and sees its name for "missing".
+    // Null (every other platform) = all of them, as before.
+    const bool *controlAvailable = nullptr;
+
+    // Windows: the hints and the labels by the buttons name the keyboard key as well as the pad button
+    // ("A/ENTER", "B/ESC", "SELECT/TAB"). Off everywhere else: the consoles keep exactly their text.
+    bool keyboardHints = false;
+    // Windows (mouse and touch): a pause button during play and a back arrow wherever only B went back, so every
+    // screen can be worked by tapping. Off everywhere else.
+    bool pointerUi = false;
+    // A click or tap at (x, y) in the overlay's logical pixels (what draw() gets as its w x h). Returns the buttons it
+    // stands for - the app presses them for one step through the same road a pad takes - after moving the cursor of
+    // the list it hit, so A / Left / Right then act on that row. 0 = it hit the screens but means nothing,
+    // kPointerField = it hit nothing the screens own (the play field: taps and swipes there are hops).
+    static const int kPointerField = -1;
+    int pointerTap(int x, int y, const Game &game, int w, int h);
+    // would a press at (x, y) land on something the screens own (so it must not start a hop)?
+    bool pointerOnUi(int x, int y, const Game &game, int w, int h) const;
+    // the mouse wheel or a vertical swipe over the settings list: moves it by `rows` (the cursor stays on screen)
+    void pointerScroll(int rows, int h);
 
 private:
     void drawHome(Renderer &renderer, TextRenderer &text, int screenW, int screenH);
@@ -154,6 +175,18 @@ private:
     // O24: does the home screen ask how many play before a game starts?
     bool askingPlayers() const { return settings && settings->askPlayers; }
     static lang::Str settingsLabel(SettingsItem item);
+    bool controlUsable(int v) const { return !controlAvailable || controlAvailable[v]; }
+    // keyboardHints: "A START   SELECT SETTINGS" -> "A/ENTER START   SELECT/TAB SETTINGS" (each part of a hint starts
+    // with its button's name, in every language); a label by a button likewise
+    std::string hintText(const std::string &hint) const;
+    std::string buttonLabel(const char *button) const;
+    // a hint line, centred; too wide for the screen (keyboardHints only) it takes two lines, ending at the same place
+    void drawHint(Renderer &renderer, TextRenderer &text, const std::string &hint, int w, int y, int size) const;
+    // pointerUi: the back arrow (the settings screen's image) with its label under it
+    void drawBackButton(Renderer &renderer, TextRenderer &text, int x, int y) const;
+    void drawPauseButton(Renderer &renderer, int w) const;
+    // the element under (x, y), without acting on it: 0 none, else one of the kHit values in screens.cpp
+    int pointerHit(int x, int y, const Game &game, int w, int h, int *index) const;
     std::string settingsValue(SettingsItem item, const UserSettings &s) const;
 
     // O11.2/O11.4: what the home screen shows — the two modes, the career menu behind Progression, and the
@@ -166,6 +199,9 @@ private:
     bool settingsFromPause_ = false;
     int cursor_ = 0;
     int scrollTop_ = 0; // O23: first list row on screen
+    // B pressed while this menu was open. The pause menu resumes on B's RELEASE, and on Windows Esc is both Start
+    // (which opened the pause) and B: without this its release closed the menu the same press had opened.
+    bool bSeen_ = false;
     HomePage homePage_ = HomePage::Modes;
     int homeCursor_ = 0, careerCursor_ = 0, confirmCursor_ = 0, playersCursor_ = 0;
     int pendingMode_ = 0; // O24: which mode the Players page is answering for (0 Classic, 1 Progression)
