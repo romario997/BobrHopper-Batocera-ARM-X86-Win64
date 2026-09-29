@@ -1,4 +1,10 @@
-# Bóbr Hopper — R36S / ArkOS
+# Bóbr Hopper — Batocera ARM / x86 (and R36S / ArkOS)
+
+> **Attribution.** This repository is a derivative of **[angree/R36S-BobrHopper](https://github.com/angree/R36S-BobrHopper)**
+> by G. Korycki, which is itself a port of **[EvanBacon/expo-crossy-road](https://github.com/EvanBacon/expo-crossy-road)**
+> by Evan Bacon. Both are MIT licensed; this fork keeps the same **MIT licence** — see [LICENSE](LICENSE) (all
+> copyright notices kept) and [NOTICE.md](NOTICE.md) (who made which part). Not affiliated with Hipster Whale, Yodo1 or
+> "Crossy Road".
 
 A hopping game for the **R36S** handheld and other ArkOS devices: a native C++17 build on SDL2 and OpenGL ES 2,
 640×480, installed through the console's Ports menu.
@@ -9,7 +15,7 @@ Current build: **v028**.
 
 ## Batocera: ARM handhelds and x86 PCs
 
-This fork adds **Batocera** builds next to the R36S one (release packages: `BobrHopper-Batocera-<ver>.zip` for ARM,
+This repository (https://github.com/romario997/BobrHopper-Batocera-ARM-X86-Win64) adds **Batocera** builds next to the R36S one (release packages: `BobrHopper-Batocera-<ver>.zip` for ARM,
 `BobrHopper-BatoceraPC-<ver>.zip` for x86_64):
 
 - **ARM** (tested on the Anbernic **RG35XX H**, community Batocera v40, Mali-G31): two binaries in one package,
